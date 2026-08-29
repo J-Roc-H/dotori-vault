@@ -33,7 +33,11 @@ handoff*, the other is *the folder mirroring a runtime's memory*.
 - Read the relevant handoff **before** starting work in that area
 - **Delete the file** once the work is done and verified — deleting is the completion
   signal, not a checkbox inside it
-- The entry document owns the list of open handoffs; update it when you add or remove one
+- **Do not keep a second list of open handoffs.** The folder is the list, and every run
+  reports what is new in it and what has been sitting too long. An entry document that also
+  tracks them is a second owner of the same fact: the two will disagree and nothing will say
+  which is current. See [routing.md](routing.md) — point, do not copy. This document used to
+  ask for exactly that duplicate, before the log reported enough to make it unnecessary
 
 A handoff that is marked done but left in place stops meaning anything. If several are
 sitting there completed, nobody trusts the list, and the next real one gets ignored too.

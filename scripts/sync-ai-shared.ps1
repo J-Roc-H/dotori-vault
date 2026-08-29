@@ -965,6 +965,33 @@ $lifecycleSummary = ($statusParts -join ' ') + ' / no-status=' + $missingStatus.
 # site is the fix that does not depend on how the caller is configured.
 $cloudConflictCopies = @(Find-ConflictCopies $shared)
 
+# candidates\ holds things an agent thinks are worth promoting into human knowledge.
+# docs/candidates.md gives it four criteria and a human approval gate, and nothing read the
+# folder at all - so a queue whose entire purpose is to be reviewed had no way of saying it
+# was not being. Same shape as the handoff pile, same remedy: count, and name the old ones.
+$candidatesDir = Join-Path $shared 'candidates'
+$candidatesWaiting = @()
+if (Test-Path -LiteralPath $candidatesDir) {
+    Get-ChildItem -LiteralPath $candidatesDir -File -Filter '*.md' | ForEach-Object {
+        if ($_.Name -eq 'README.md') { return }
+        $days = [int]((Get-Date) - $_.LastWriteTime).TotalDays
+        if ($days -ge $StaleHandoffDays) { $candidatesWaiting += ($_.Name + ' (' + $days + ' days)') }
+    }
+}
+
+# Rules files grow, and every task pays to read them. docs/routing.md sets a budget of
+# roughly 30 lines and explains why the limit is the point - then nothing measured it.
+# Reported, never failed: "roughly" is the document's word, so the number is for a person
+# to judge. A build that fails on line 31 of a soft budget is a check nobody keeps.
+$rulesSizes = @()
+$sourceDir = Join-Path $shared 'source'
+if (Test-Path -LiteralPath $sourceDir) {
+    Get-ChildItem -LiteralPath $sourceDir -File -Filter '*.md' | Sort-Object Name | ForEach-Object {
+        $n = @([IO.File]::ReadAllLines($_.FullName)).Count
+        $rulesSizes += ($_.Name + '=' + $n)
+    }
+}
+
 # handoff\ is a deliberate cross-machine inbox, not a memory file - it is never synced,
 # indexed, or recalled automatically (2026-08-18: confirmed no other code path reads it).
 # Without this, a handoff meant to alert the other machine sits there until someone
@@ -1043,7 +1070,9 @@ $log = @("# AI shared sync log", "", (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), "
     "Lifecycle: $lifecycleSummary",
     "Cloud conflict copies: $($cloudConflictCopies.Count)",
     "New handoff files: $($newHandoff.Count)",
-    "Handoffs older than $StaleHandoffDays days: $($staleHandoff.Count)")
+    "Handoffs older than $StaleHandoffDays days: $($staleHandoff.Count)",
+    "Candidates waiting over $StaleHandoffDays days: $($candidatesWaiting.Count)",
+    "Rules files (lines, budget ~30): $($rulesSizes -join ' | ')")
 if ($legacyLeftovers.Count) {
     $log += ''; $log += '## Superseded per-machine files'
     $log += 'These are named from the old USERNAME-based machine key. Their contents were'
@@ -1059,6 +1088,12 @@ if ($unevidenced.Count) {
     $log += 'output, an incident - and record none. Add what you checked, or move them back'
     $log += 'to active. Inference is not evidence.'
     $log += ($unevidenced | ForEach-Object { '- ' + $_ })
+}
+if ($candidatesWaiting.Count) {
+    $log += ''; $log += '## Candidates waiting for a decision'
+    $log += 'Promotion into human knowledge is approved by a person and never automatic.'
+    $log += 'A queue nobody empties stops being a queue - decide these, or move them back.'
+    $log += ($candidatesWaiting | ForEach-Object { '- ' + $_ })
 }
 if ($staleHandoff.Count) {
     $log += ''; $log += '## Handoffs left in place'
@@ -1116,7 +1151,8 @@ if (-not [String]::Equals($runningScript, $installedScript, [StringComparison]::
 # what gets echoed back into the conversation.
 $hasNews = ($conflicts.Count -gt 0) -or ($invalidSkillFolders.Count -gt 0) -or
     ($missingStatus.Count -gt 0) -or ($unevidenced.Count -gt 0) -or
-    ($staleHandoff.Count -gt 0) -or ($memPushed -gt 0) -or ($memPulled -gt 0) -or
+    ($staleHandoff.Count -gt 0) -or ($candidatesWaiting.Count -gt 0) -or
+    ($memPushed -gt 0) -or ($memPulled -gt 0) -or
     ($sourceChanges -gt 0) -or ($gitStatus -ne 'no changes') -or ($newHandoff.Count -gt 0)
 
 # Rebuild the FTS5 search index only when something actually changed - it's a

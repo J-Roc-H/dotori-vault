@@ -347,6 +347,42 @@ Describe 'Counting the conventions the docs insist on' {
         $section | Should -Match 'handoff-machine-b-old'
         $section | Should -Not -Match 'handoff-machine-b-new'
     }
+
+    It 'names a candidate nobody has decided on' {
+        # docs/candidates.md gives this folder four criteria and a human approval gate, and
+        # nothing read it at all - a queue whose whole purpose is review, with no way to say
+        # it was not being reviewed.
+        $w = Register-Workspace (New-Workspace)
+        $dir = Join-Path $w.Vault 'candidates'
+        New-Item -ItemType Directory -Path $dir -Force | Out-Null
+        $old = Join-Path $dir 'promote-me.md'
+        [IO.File]::WriteAllText($old, 'candidate', (New-Object System.Text.UTF8Encoding))
+        [IO.File]::WriteAllText((Join-Path $dir 'just-arrived.md'), 'new',
+            (New-Object System.Text.UTF8Encoding))
+        (Get-Item $old).LastWriteTime = (Get-Date).AddDays(-30)
+
+        Invoke-Sync $w.A $w.Vault 'Initialize'
+
+        $log = Get-SyncLog $w.A $w.Vault
+        $log | Should -Match 'Candidates waiting over 14 days: 1'
+        $section = ($log -split '## Candidates waiting for a decision')[1]
+        $section | Should -Match 'promote-me'
+        $section | Should -Not -Match 'just-arrived'
+    }
+
+    It 'reports the size of each rules file without failing on it' {
+        # docs/routing.md budgets the router at roughly 30 lines because every task pays to
+        # read it. "Roughly" is the document's word, so this reports a number for a person
+        # to judge - a build that failed on line 31 of a soft budget is a check nobody keeps.
+        $w = Register-Workspace (New-Workspace)
+        $dir = Join-Path $w.Vault 'source'
+        New-Item -ItemType Directory -Path $dir -Force | Out-Null
+        [IO.File]::WriteAllLines((Join-Path $dir 'claude-CLAUDE.md'), (1..40 | ForEach-Object { "line $_" }))
+
+        { Invoke-Sync $w.A $w.Vault 'Initialize' } | Should -Not -Throw
+
+        Get-SyncLog $w.A $w.Vault | Should -Match 'claude-CLAUDE\.md=40'
+    }
 }
 
 Describe 'Deletions are not propagated (invariant 2)' {

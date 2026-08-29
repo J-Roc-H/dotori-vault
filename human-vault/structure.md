@@ -40,8 +40,14 @@ Three rules keep it moving:
 2. **Stamp it when processed**, with the date and where it went.
 3. **Move it immediately once stamped.** The inbox holds unprocessed items only.
 
-Anything unstamped past a threshold — thirty days works — is a backlog signal worth
-reporting, not a normal state.
+Anything unstamped past a threshold — thirty days works — is a backlog signal, not a
+normal state.
+
+**Nothing here reports it for you.** DOTORI's sync does not read this vault at all: it is
+your knowledge, and a tool that walked through it to count things would be reaching into
+the wrong half of the split this whole structure exists to keep. If you want the signal,
+it is a one-line search of your own — the point of writing the rule down is that you know
+what to look for.
 
 ## Renumbering
 

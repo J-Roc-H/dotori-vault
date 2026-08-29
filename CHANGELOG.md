@@ -97,11 +97,35 @@ person who wrote it. Every one of them is invisible on the machine it grew up on
     `docs/handoff.md` already described this failure exactly — a pile of finished-but-present
     handoffs makes the whole list untrustworthy — while the log watched only for arrivals.
 
-  Others found in the same audit and not yet closed: the entry document's handoff list is
-  never checked against the folder, `docs/routing.md`'s ~30-line router budget has no check,
-  `human-vault/structure.md` says an inbox item unprocessed past thirty days is "worth
-  reporting" and nothing reports it, `candidates/` is not read by the sync at all, and the
-  vault's `projects/` is never examined for work that ended.
+  The remaining five from that audit are now resolved, and only two of them by writing
+  code — which was the point. A convention earns a counter when its drift is silent,
+  harmful and *unambiguous*; if it cannot be counted without guessing, the convention is
+  underspecified or should not exist. Building all five would have grown the system to
+  satisfy its own documentation. `docs/evolution.md` now carries that rule beside the one
+  it qualifies.
+
+  - **`candidates/` waiting too long is counted and named.** The folder has four criteria
+    and a human approval gate, and nothing read it at all — a queue whose entire purpose is
+    review, unable to say it was not being reviewed.
+  - **Each rules file's line count is reported.** `docs/routing.md` budgets the router at
+    roughly 30 lines because every task pays to read it, then measured nothing. Reported,
+    never failed: "roughly" is the document's word, and a build that fails on line 31 of a
+    soft budget is a check nobody keeps.
+  - **Removed: the entry document's duplicate handoff list.** `docs/handoff.md` asked for a
+    hand-maintained list of open handoffs while `docs/routing.md` says to give every fact
+    exactly one owner, because two will disagree and nothing will say which is current. The
+    log now reports what is new and what is stale, so the duplicate has no reason to exist.
+    The check nobody should build here is the one that parses free-form prose to find a
+    list — it would guess, and a check that cries wolf gets ignored.
+  - **Removed: the promise that something reports a stale inbox.**
+    `human-vault/structure.md` called an unprocessed item past thirty days "worth
+    reporting", implying a reporter that does not and should not exist: the sync does not
+    read the human vault, and a tool that walked through it to count things would be
+    reaching into the wrong half of the split the structure exists to keep.
+  - **Not done: staleness for the vault's `projects/`.** Nothing here can tell a long-running
+    project from an abandoned one, and age is a bad proxy for either. A counter with no
+    honest signal behind it is worse than the gap.
+
 - **`-Mode Report`** — a pre-flight that writes nothing. It resolves every path, says which
   runtimes it found, and names the settings files it would edit along with the exact hook
   line it would add. Everything it prints is derived from the same variables the real run
