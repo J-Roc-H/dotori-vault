@@ -1,0 +1,2 @@
+- [project-widget-exporter](project-widget-exporter.md) - Widget exporter, batch path and its encoding trap
+- [feedback-verify-output-first](feedback-verify-output-first.md) - Check the output folder before theorizing

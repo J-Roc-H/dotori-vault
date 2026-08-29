@@ -1,0 +1,20 @@
+# Line endings are not cosmetic here.
+#
+# The memory sync compares file hashes to decide what changed. A file that differs only by
+# a carriage return hashes differently, looks edited on both machines at once, and gets
+# reported as a conflict - and a conflict deliberately keeps its old baseline, so nothing
+# self-heals. That is how sync once stopped entirely. See docs/sync.md.
+#
+# So: normalize in the repository, and let checkout decide what each platform gets.
+* text=auto
+
+# PowerShell on Windows. CRLF on checkout, and never touched by an editor that guesses.
+*.ps1   text eol=crlf
+
+# Documentation and vault content stay LF wherever they land, because these are the files
+# the sync actually compares across machines.
+*.md    text eol=lf
+*.json  text eol=lf
+*.yaml  text eol=lf
+*.yml   text eol=lf
+LICENSE text eol=lf
