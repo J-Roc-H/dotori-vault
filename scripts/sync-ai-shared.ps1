@@ -616,15 +616,24 @@ if ($old -and $old.files) { foreach ($x in $old.files) { $oldFiles[$x.relative] 
 # by the old value; carry that across once so upgrading does not replay old handoffs.
 $me = $machine
 $oldHandoffSeen = @{}
-if ($old -and $old.handoffSeen -and -not ($old.handoffSeen -is [Array]) -and
-        -not $old.handoffSeen.$me -and $legacyKey -and $old.handoffSeen.$legacyKey) {
-    $old.handoffSeen | Add-Member NoteProperty $me @($old.handoffSeen.$legacyKey) -Force
+# Probe for the keys rather than reading them blind. Whether an absent property returns
+# $null or throws depends on how strictly the session is running, and a migration path is
+# the last place to leave that to chance.
+$seenObj = $null
+if ($old -and $old.PSObject.Properties['handoffSeen']) { $seenObj = $old.handoffSeen }
+if ($seenObj -and -not ($seenObj -is [Array]) -and $legacyKey) {
+    $minePresent = [bool]$seenObj.PSObject.Properties[$me]
+    $legacyProp = $seenObj.PSObject.Properties[$legacyKey]
+    if (-not $minePresent -and $legacyProp) {
+        $seenObj | Add-Member NoteProperty $me @($legacyProp.Value) -Force
+    }
 }
 if ($old -and $old.handoffSeen) {
     if ($old.handoffSeen -is [Array]) {
         foreach ($h in $old.handoffSeen) { $oldHandoffSeen[$h] = $true }
     } else {
-        $mine = $old.handoffSeen.$me
+        $mineProp = $old.handoffSeen.PSObject.Properties[$me]
+        $mine = if ($mineProp) { $mineProp.Value } else { $null }
         if ($mine) { foreach ($h in $mine) { $oldHandoffSeen[$h] = $true } }
     }
 }
@@ -936,8 +945,8 @@ $lifecycleSummary = ($statusParts -join ' ') + ' / no-status=' + $missingStatus.
 # Whatever sync client is underneath, ask the folder what it did. Nobody here can test
 # against every service, but a count in the log means an untested one still reports itself.
 # @(...) at the call site: PowerShell unrolls an empty array returned from a function into
-# $null, and $null.Count is an error under Set-StrictMode. Harmless without it, which is
-# why it survived - the conformance harness runs strict on purpose.
+# $null, and $null.Count then errors in a strictly-running session. Wrapping at the call
+# site is the fix that does not depend on how the caller is configured.
 $cloudConflictCopies = @(Find-ConflictCopies $shared)
 
 # handoff\ is a deliberate cross-machine inbox, not a memory file - it is never synced,

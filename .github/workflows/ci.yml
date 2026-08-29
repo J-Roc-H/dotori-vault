@@ -14,10 +14,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Deliberately NOT under Set-StrictMode. The script does not set it, and the session
+      # hook runs powershell -NoProfile, so no user ever executes this code strictly. Running
+      # the tests strictly meant three red builds over findings no user could hit, while the
+      # conformance failures that matter sat behind the noise. A check that cries wolf gets
+      # ignored, which is the one thing this project cannot afford in its own CI.
       - name: Run regression tests (Windows PowerShell 5.1)
         shell: powershell
         run: |
-          Set-StrictMode -Version Latest
           Install-Module Pester -Force -Scope CurrentUser -SkipPublisherCheck -MinimumVersion 5.0.0
           Import-Module Pester -MinimumVersion 5.0.0
           $config = New-PesterConfiguration
