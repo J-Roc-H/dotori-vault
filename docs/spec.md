@@ -308,3 +308,14 @@ Two implementations share a vault correctly if, after each has run twice:
 - neither machine's manifest, log or memory index has been written by the other
 - two machines forced onto the same key stop with a collision error rather than
   overwriting each other
+
+This repository executes that check rather than only describing it:
+[`tests/Conformance.Tests.ps1`](../tests/Conformance.Tests.ps1) builds two machines in a
+temporary tree — one shared vault, a separate runtime home and mirror per machine — and
+runs the implementation end to end against each point above. Every path the script touches
+is a parameter, which is what makes that possible; an implementation that hardcodes any of
+them cannot be conformance-tested, and that is a reason to treat hardcoding as a defect.
+
+A second implementation should be able to take the same list and produce its own harness.
+If it can also share a vault with this one and both harnesses stay green, the two
+interoperate.

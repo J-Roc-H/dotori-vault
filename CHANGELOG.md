@@ -66,6 +66,15 @@ person who wrote it. Every one of them is invisible on the machine it grew up on
   reports worth the most, and a plain statement of how much maintenance to expect. Also
   what happens to your data if the project stops, which is the question a one-maintainer
   project owes an answer to.
+- `tests/Conformance.Tests.ps1` — the conformance check from `docs/spec.md` section 10,
+  executed instead of described. It builds two machines in a temp tree (one shared vault, a
+  separate runtime home and mirror each) and runs the implementation end to end against
+  every point: idempotence, propagation, real conflicts leaving both sides untouched,
+  encoding-only differences converging without a conflict, per-machine files never written
+  by the other machine, and a forced key collision stopping the run. Also covers invariant
+  2 (deletions restored, not propagated), invariant 6 (a missing runtime is skipped, not
+  fatal), and the agent conversion end to end. The spec was precise enough to test; this is
+  what makes it a contract rather than a description.
 - `tests/` — regression tests pinning each of the above, plus a check that the shim and the
   implementation expose the same parameters. Not yet the conformance harness that
   `docs/spec.md` section 10 describes; that is the next step.
