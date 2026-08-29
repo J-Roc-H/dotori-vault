@@ -271,9 +271,14 @@ Describe 'Report mode writes nothing' {
             -MirrorRoot $w.A.Mirror -MachineKey $w.A.Key `
             -WarningAction SilentlyContinue 6>&1 | Out-String
 
-        $out | Should -Match 'settings\.json'
-        $out | Should -Match '-Mode Sync'
-        $out | Should -Match ([regex]::Escape($w.A.Key))
+        # Collapse whitespace before matching. Write-Host output captured through the
+        # information stream is wrapped at the console width, which split "-Mode Sync"
+        # across a line break and failed an assertion about behaviour that was correct.
+        # The report's job is to name these things, not to lay them out on one line.
+        $flat = ($out -replace '\s+', ' ')
+        $flat | Should -Match 'settings\.json'
+        $flat | Should -Match '-Mode Sync'
+        $flat | Should -Match ([regex]::Escape($w.A.Key))
     }
 
     It 'does not create the machine fingerprint file' {

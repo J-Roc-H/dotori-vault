@@ -2,7 +2,7 @@
 
 **DOcuments TO Real Intelligence**
 
-*일터에서 하던 작업을 집에서 그대로 이어서. 규칙·스킬·기억이 기기와 AI를 따라옵니다.*
+*일터에서 갖춘 AI 작업 환경을 집에서 그대로. 규칙·스킬·기억이 기기와 AI를 따라옵니다.*
 
 > **Windows-first, on purpose.** PowerShell 5.1, nothing to install, no runtime to manage.
 > Most tooling in this space assumes a Unix machine and leaves Windows users to adapt it;
@@ -276,6 +276,29 @@ finding it in the same file its author runs.
 ## Known limitations
 
 Stated up front, because finding these yourself is worse than being told.
+
+**The session itself does not travel.** This is the one people expect and do not get.
+
+| Crosses over | Does not |
+|---|---|
+| Rules, skills, agent definitions | The conversation |
+| Memory that was **written** during the session | Whatever you were part-way through |
+| | What you were about to do next |
+
+Memory sync reads one folder — the runtime's own `projects\<project>\memory`. A session
+transcript does not live there and is not copied. So closing the laptop mid-task on Friday
+and opening the other machine on Saturday gives you the same environment and none of the
+thread: the agent knows how you work, not what you were doing.
+
+**Nothing writes a handoff for you.** If you want the work to continue elsewhere, leave a
+note before you stop — `handoff/` for an instruction to the other machine, `projects/` for
+state that spans sessions. Both are folders a person fills in. The sync will tell the other
+machine a new handoff exists; it will not invent one.
+
+**And give the upload a moment.** The sync writes into the vault when a session ends, but
+your cloud client still has to send it. Shut the machine down seconds later and the last
+thing written may never leave — and nothing warns you, because the log stays on the machine
+you walked away from.
 
 **It reads an agent runtime's internal memory folder.** Memory sync locates the local
 store by walking the runtime's own project directory layout. That layout is undocumented

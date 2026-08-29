@@ -6,6 +6,11 @@ can.
 
 Handoffs travel with the vault's own cloud sync. They are not part of the memory sync.
 
+**Nothing creates a handoff for you.** This folder is written by a person. The sync reads
+it, notices files it has not seen before, and says so in the log — that is all it does. A
+session that ends without one leaves nothing behind for the other machine, however much
+work went into it.
+
 File name: `handoff-<machine>-<topic>-<date>.md`
 
 ## Not the same as memory

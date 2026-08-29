@@ -46,6 +46,17 @@ person who wrote it. Every one of them is invisible on the machine it grew up on
 
 ### Changed
 
+- **The headline promised the wrong thing.** It said you could carry on at home the *work*
+  you were doing at the office. What actually travels is the *environment* — rules, skills,
+  agent definitions, and memory that was written down. The conversation does not: memory
+  sync reads the runtime's `projects\<project>\memory` folder, and a session transcript is
+  not in it. So a person could close the laptop mid-task believing DOTORI had them covered,
+  and find the same setup and none of the thread waiting at home. The tagline now says
+  environment, and `Known limitations` opens with what crosses and what does not, why, and
+  the fact that nothing writes a handoff for you — plus the quieter trap that the cloud
+  client still needs time to upload after the last session ends, and the log that would
+  have told you stays on the machine you walked away from. `docs/handoff.md` says the same
+  in one line where a reader will hit it: that folder is written by a person.
 - **This repository is now the code, not an extract of it.** It was published as a scrubbed
   subset of a private setup that its author kept running separately — which meant the
   published version was the one nobody actually used, and every fault above is of exactly
