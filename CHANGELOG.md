@@ -73,6 +73,35 @@ person who wrote it. Every one of them is invisible on the machine it grew up on
 
 ### Added
 
+- **`skills/wrapup/`, and two counters that make it checkable.** This project's own rule is
+  that a convention nobody counts is already broken. Auditing the documents against that
+  rule found the reverse problem as well: several conventions had **no act** — the folders
+  and the counters shipped, and nothing that fills them did. Memory has a lifecycle nobody
+  writes, `handoff/` is an inbox nothing posts to, `projects/` holds state nothing records.
+  The author had private skills for all of it and so never felt the gap; a new installation
+  gets the audit without the means.
+
+  `skills/wrapup/` is that act, kept to exactly what Core already defines: write the memory
+  with the required fields, update project state if the work spans sessions, write a handoff
+  if it must continue elsewhere. It never promotes, never deletes, and never fires by
+  itself. It is generic on purpose — a wrapup that knows your document standard or your
+  vault layout is domain content and belongs in your own repository, which `CONTRIBUTING.md`
+  now states as the limit of this exception.
+
+  Two conventions that had no counter now have one:
+  - **`verified` with an empty `evidence` list is counted and named.** `docs/memory.md` and
+    `docs/spec.md` both require named evidence and say inference is not evidence. Nothing
+    checked it, so the rule that decides whether a status means anything was the only rule
+    with nothing watching it.
+  - **Handoffs older than `-StaleHandoffDays` (14) are counted and named.**
+    `docs/handoff.md` already described this failure exactly — a pile of finished-but-present
+    handoffs makes the whole list untrustworthy — while the log watched only for arrivals.
+
+  Others found in the same audit and not yet closed: the entry document's handoff list is
+  never checked against the folder, `docs/routing.md`'s ~30-line router budget has no check,
+  `human-vault/structure.md` says an inbox item unprocessed past thirty days is "worth
+  reporting" and nothing reports it, `candidates/` is not read by the sync at all, and the
+  vault's `projects/` is never examined for work that ended.
 - **`-Mode Report`** — a pre-flight that writes nothing. It resolves every path, says which
   runtimes it found, and names the settings files it would edit along with the exact hook
   line it would add. Everything it prints is derived from the same variables the real run

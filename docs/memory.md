@@ -65,6 +65,12 @@ Rules that make the states mean something:
 - **Deletions do not propagate.** A memory missing locally is restored from the archive.
   Retiring one should be deliberate.
 
+Every sync counts statuses, lists entries missing the field, and lists entries claiming
+`verified` or higher with an empty `evidence` list. That last count was missing for a long
+time, which meant the rule deciding whether a status means anything was the one rule with
+nothing watching it — see [evolution.md](evolution.md) on why that is the same as not
+having the rule.
+
 Every sync counts statuses and lists entries missing the field. That counter is the whole
 reason the convention survives: the runtime does not enforce it, so without a count it
 would quietly become metadata nobody updates.

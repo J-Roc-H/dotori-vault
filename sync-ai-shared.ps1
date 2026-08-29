@@ -24,6 +24,7 @@ param(
     [string]$AntigravityHome,
     [string]$MirrorRoot,
     [string]$MachineKey,
+    [int]$StaleHandoffDays,
     [int]$KeepBackups
 )
 

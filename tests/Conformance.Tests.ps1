@@ -46,7 +46,8 @@ BeforeAll {
         return [IO.File]::ReadAllText($p)
     }
 
-    function global:New-Memory([string]$dir, [string]$name, [string]$body) {
+    function global:New-Memory([string]$dir, [string]$name, [string]$body,
+            [string]$status = 'active', [string]$evidence = '[]') {
         $text = @"
 ---
 name: $name
@@ -54,8 +55,9 @@ description: fixture $name
 metadata:
   node_type: memory
   type: reference
-  status: active
+  status: $status
   agent: test
+  evidence: $evidence
   modified: 2026-01-20T14:30:00.000Z
 ---
 
@@ -287,6 +289,55 @@ Describe 'Report mode writes nothing' {
         $w = Register-Workspace (New-Workspace)
         Invoke-Sync $w.A $w.Vault 'Report'
         (Join-Path $w.A.Mirror 'machine-id') | Should -Not -Exist
+    }
+}
+
+Describe 'Counting the conventions the docs insist on' {
+    It 'names a memory claiming verified with no evidence' {
+        # docs/memory.md and spec.md section 5: promotion to verified requires named
+        # evidence, and inference is not evidence. Nothing counted it, so the rule that
+        # decides whether a status means anything was the one rule with no counter.
+        $w = Register-Workspace (New-Workspace)
+        New-Memory $w.A.MemoryDir 'honest-one' 'body' 'verified' "['docs/spec.md']"
+        New-Memory $w.A.MemoryDir 'unbacked-one' 'body' 'verified' '[]'
+        New-Memory $w.A.MemoryDir 'plain-one' 'body' 'active' '[]'
+
+        Invoke-Sync $w.A $w.Vault 'Initialize'
+
+        $log = Get-SyncLog $w.A $w.Vault
+        $log | Should -Match 'unevidenced=1'
+        $log | Should -Match 'unbacked-one'
+        $log | Should -Not -Match '- honest-one'
+    }
+
+    It 'does not count active as needing evidence' {
+        # active is the honest resting place for something you have not checked. Demanding
+        # evidence there would push people to claim verified instead, which is backwards.
+        $w = Register-Workspace (New-Workspace)
+        New-Memory $w.A.MemoryDir 'plain-one' 'body' 'active' '[]'
+        Invoke-Sync $w.A $w.Vault 'Initialize'
+        Get-SyncLog $w.A $w.Vault | Should -Match 'unevidenced=0'
+    }
+
+    It 'names a handoff that has been sitting too long' {
+        # docs/handoff.md: deleting one is the completion signal, and a pile of finished-
+        # but-present handoffs makes the whole list untrustworthy. Only new ones were
+        # reported, so the pile the document warns about could build up unwatched.
+        $w = Register-Workspace (New-Workspace)
+        $dir = Join-Path $w.Vault 'handoff'
+        New-Item -ItemType Directory -Path $dir -Force | Out-Null
+        $old = Join-Path $dir 'handoff-machine-b-old-2026-01-01.md'
+        $new = Join-Path $dir 'handoff-machine-b-new-2026-08-29.md'
+        [IO.File]::WriteAllText($old, 'stale', (New-Object System.Text.UTF8Encoding))
+        [IO.File]::WriteAllText($new, 'fresh', (New-Object System.Text.UTF8Encoding))
+        (Get-Item $old).LastWriteTime = (Get-Date).AddDays(-40)
+
+        Invoke-Sync $w.A $w.Vault 'Initialize'
+
+        $log = Get-SyncLog $w.A $w.Vault
+        $log | Should -Match 'Handoffs older than 14 days: 1'
+        $log | Should -Match 'handoff-machine-b-old'
+        $log | Should -Not -Match '- handoff-machine-b-new'
     }
 }
 

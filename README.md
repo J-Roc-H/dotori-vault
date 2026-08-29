@@ -122,7 +122,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "<repo>\sync-ai-shared.ps1" 
    confirm it leaves nothing behind.
 
 2. Copy `sync-ai-shared.ps1` (the shim) and `scripts\sync-ai-shared.ps1` into your vault
-   root and `scripts\` respectively.
+   root and `scripts\` respectively. Copy `skills\wrapup\` in too — it is the routine that
+   ends a session with something written down, and without it the counters below have
+   nothing to count.
 3. Run once to seed the folders and install the session hooks:
 
 ```powershell
@@ -189,6 +191,7 @@ nothing to decide.
 
 | Document | What it covers |
 |---|---|
+| [skills/wrapup/](skills/wrapup/SKILL.md) | The finishing routine: what to write down before you stop |
 | [docs/quickstart.md](docs/quickstart.md) | Ten minutes on a scratch path: see it work without touching your setup |
 | [docs/spec.md](docs/spec.md) | The on-disk contract, for writing another implementation |
 | [docs/multi-machine.md](docs/multi-machine.md) | How machines and runtimes scale, and why neither is a fixed list |
@@ -294,6 +297,11 @@ thread: the agent knows how you work, not what you were doing.
 note before you stop — `handoff/` for an instruction to the other machine, `projects/` for
 state that spans sessions. Both are folders a person fills in. The sync will tell the other
 machine a new handoff exists; it will not invent one.
+
+The shipped [`skills/wrapup/`](skills/wrapup/SKILL.md) is that step: ask for it when you
+finish, and it writes the memory, the project state, and the handoff if one is needed. It
+still has to be asked. A hook cannot do it — the session-end hook fires after every turn,
+which is the wrong granularity, and nothing here can summarise a conversation anyway.
 
 **And give the upload a moment.** The sync writes into the vault when a session ends, but
 your cloud client still has to send it. Shut the machine down seconds later and the last

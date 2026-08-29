@@ -24,6 +24,14 @@ Skills, workflows and recipes are worth sharing — just not from inside this re
 Put them in your own repo. Once a few exist, they will get an index here; there is no
 point building one for a list that is empty.
 
+**The one exception, and its limit.** Core ships a skill only where the skill performs a
+convention Core itself defines, and nothing else. `skills/wrapup/` writes the memory whose
+lifecycle Core counts, the project state Core's folders describe, and the handoff Core's log
+reports — it is the act for machinery Core was already auditing without it. A skill that
+does domain work is not that, however useful: your language, your tool, your employer, your
+vault layout. And if a skill here needs a rule Core has not written down, that is a missing
+document, not a bigger skill.
+
 ## The two reports worth the most
 
 These cover ground this project cannot reach on its own, and they are the ones that get

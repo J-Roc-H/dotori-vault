@@ -38,6 +38,10 @@ handoff*, the other is *the folder mirroring a runtime's memory*.
 A handoff that is marked done but left in place stops meaning anything. If several are
 sitting there completed, nobody trusts the list, and the next real one gets ignored too.
 
+So the sync counts how many have been sitting longer than a threshold (`-StaleHandoffDays`,
+14 by default) and names them. Reporting only *new* handoffs, which is what it used to do,
+watches for the arrival and not for the pile.
+
 ## Minimum contents
 
 - What changed

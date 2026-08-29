@@ -40,6 +40,9 @@ param(
     # still be stable and unique, and Test-MachineIdentity below checks the uniqueness half
     # rather than trusting it.
     [string]$MachineKey = '',
+    # How long a handoff may sit before the log starts naming it. A handoff is deleted
+    # when its work is done, so an old one is either forgotten or finished-but-left.
+    [int]$StaleHandoffDays = 14,
     [int]$KeepBackups = 3
 )
 
@@ -923,11 +926,23 @@ if ($hasCodex) { Copy-Tree $memory (Join-Path $CodexHome 'memories\claude-handof
 $memoryRootShared = Join-Path $shared 'memory'
 $statusCounts = @{}
 $missingStatus = @()
+# docs/memory.md and docs/spec.md section 5 both say promotion to verified requires named
+# evidence, and that inference is not evidence. Nothing checked it, so a memory could claim
+# verified with an empty evidence list forever - the one rule in this system that decides
+# whether a status means anything, and the only one with no counter. By this project's own
+# test (docs/evolution.md: a convention nobody counts is already broken) it was broken.
+$unevidenced = @()
+$evidencedStates = @('verified', 'durable', 'promoted')
 if (Test-Path -LiteralPath $memoryRootShared) {
     Get-ChildItem -LiteralPath $memoryRootShared -File -Filter '*.md' -Recurse | ForEach-Object {
         if ($_.Name -like 'MEMORY-*.md' -or $_.Name -eq 'MEMORY.md' -or $_.Name -eq 'README.md') { return }
         $st = Get-FrontmatterField $_.FullName 'status'
         $rel = $_.FullName.Substring($memoryRootShared.Length).TrimStart('\')
+        if ($st -and $evidencedStates -contains $st.ToLower()) {
+            # An empty YAML list is "evidence: []" - present as a field, empty as a claim.
+            $ev = Get-FrontmatterField $_.FullName 'evidence'
+            if (-not $ev -or $ev -eq '[]') { $unevidenced += ($rel + ' (' + $st + ')') }
+        }
         if (-not $st) { $missingStatus += $rel }
         else {
             if (-not $statusCounts.ContainsKey($st)) { $statusCounts[$st] = 0 }
@@ -941,7 +956,8 @@ if (Test-Path -LiteralPath $memoryRootShared) {
 # Built separately: inlining this in the log array lets -join bind across the + operators
 # and split one line into three.
 $statusParts = @($statusCounts.Keys | Sort-Object | ForEach-Object { $_ + '=' + $statusCounts[$_] })
-$lifecycleSummary = ($statusParts -join ' ') + ' / no-status=' + $missingStatus.Count
+$lifecycleSummary = ($statusParts -join ' ') + ' / no-status=' + $missingStatus.Count +
+    ' / unevidenced=' + $unevidenced.Count
 # Whatever sync client is underneath, ask the folder what it did. Nobody here can test
 # against every service, but a count in the log means an untested one still reports itself.
 # @(...) at the call site: PowerShell unrolls an empty array returned from a function into
@@ -956,10 +972,17 @@ $cloudConflictCopies = @(Find-ConflictCopies $shared)
 $handoffDir = Join-Path $shared 'handoff'
 $newHandoff = @()
 $allHandoff = @()
+$staleHandoff = @()
 if (Test-Path -LiteralPath $handoffDir) {
+    # Age matters as much as novelty. docs/handoff.md: deleting a handoff is the completion
+    # signal, and "if several are sitting there completed, nobody trusts the list, and the
+    # next real one gets ignored". Only new ones were reported, so a pile could build up
+    # unseen - the exact failure the document warns about, with nothing watching for it.
     Get-ChildItem -LiteralPath $handoffDir -File -Filter '*.md' | ForEach-Object {
         $allHandoff += $_.Name
         if (-not $oldHandoffSeen.ContainsKey($_.Name)) { $newHandoff += $_.Name }
+        $days = [int]((Get-Date) - $_.LastWriteTime).TotalDays
+        if ($days -ge $StaleHandoffDays) { $staleHandoff += ($_.Name + ' (' + $days + ' days)') }
     }
 }
 
@@ -1019,7 +1042,8 @@ $log = @("# AI shared sync log", "", (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), "
     "Mirror: $gitStatus",
     "Lifecycle: $lifecycleSummary",
     "Cloud conflict copies: $($cloudConflictCopies.Count)",
-    "New handoff files: $($newHandoff.Count)")
+    "New handoff files: $($newHandoff.Count)",
+    "Handoffs older than $StaleHandoffDays days: $($staleHandoff.Count)")
 if ($legacyLeftovers.Count) {
     $log += ''; $log += '## Superseded per-machine files'
     $log += 'These are named from the old USERNAME-based machine key. Their contents were'
@@ -1029,6 +1053,20 @@ if ($legacyLeftovers.Count) {
 }
 if ($newHandoff.Count) { $log += ''; $log += '## New handoff files'; $log += ($newHandoff | ForEach-Object { '- ' + $_ }) }
 if ($missingStatus.Count) { $log += ''; $log += '## Memory without lifecycle status'; $log += ($missingStatus | ForEach-Object { '- ' + $_ }) }
+if ($unevidenced.Count) {
+    $log += ''; $log += '## Claimed verified without evidence'
+    $log += 'These declare a status that requires named evidence - a path, a commit, test'
+    $log += 'output, an incident - and record none. Add what you checked, or move them back'
+    $log += 'to active. Inference is not evidence.'
+    $log += ($unevidenced | ForEach-Object { '- ' + $_ })
+}
+if ($staleHandoff.Count) {
+    $log += ''; $log += '## Handoffs left in place'
+    $log += 'Deleting a handoff is the completion signal. One left sitting is either'
+    $log += 'forgotten or finished and not removed; either way the next real one gets'
+    $log += 'trusted a little less.'
+    $log += ($staleHandoff | ForEach-Object { '- ' + $_ })
+}
 if ($conflicts.Count) { $log += ''; $log += '## Conflicts'; $log += ($conflicts | ForEach-Object { '- ' + $_ }) }
 if ($cloudConflictCopies.Count) {
     $log += ''; $log += '## Cloud conflict copies'
@@ -1077,7 +1115,8 @@ if (-not [String]::Equals($runningScript, $installedScript, [StringComparison]::
 # no shared asset. Full detail still lands in sync-log.md regardless - this only trims
 # what gets echoed back into the conversation.
 $hasNews = ($conflicts.Count -gt 0) -or ($invalidSkillFolders.Count -gt 0) -or
-    ($missingStatus.Count -gt 0) -or ($memPushed -gt 0) -or ($memPulled -gt 0) -or
+    ($missingStatus.Count -gt 0) -or ($unevidenced.Count -gt 0) -or
+    ($staleHandoff.Count -gt 0) -or ($memPushed -gt 0) -or ($memPulled -gt 0) -or
     ($sourceChanges -gt 0) -or ($gitStatus -ne 'no changes') -or ($newHandoff.Count -gt 0)
 
 # Rebuild the FTS5 search index only when something actually changed - it's a
@@ -1113,6 +1152,7 @@ if ($hasNews) {
     Write-Host ('Memory pushed/pulled: ' + $memPushed + '/' + $memPulled)
     Write-Host ('Mirror: ' + $gitStatus)
     Write-Host ('Memory without lifecycle status: ' + $missingStatus.Count)
+    Write-Host ('Claimed verified without evidence: ' + $unevidenced.Count)
     Write-Host ('Conflicts: ' + $conflicts.Count)
     Write-Host ('Invalid skill folders: ' + $invalidSkillFolders.Count)
     Write-Host ('Backups retained: ' + $KeepBackups)
