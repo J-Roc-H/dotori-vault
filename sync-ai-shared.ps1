@@ -12,7 +12,7 @@
 # would silently bind to the wrong slot (-KeepBackups landing in -VaultRoot).
 [CmdletBinding()]
 param(
-    [ValidateSet('Initialize', 'Sync')][string]$Mode = 'Sync',
+    [ValidateSet('Initialize', 'Sync', 'Report')][string]$Mode = 'Sync',
     [string]$VaultRoot,
     [string]$ClaudeRoot,
     [string]$ClaudeHome,

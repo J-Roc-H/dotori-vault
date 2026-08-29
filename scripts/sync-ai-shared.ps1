@@ -5,7 +5,10 @@ param(
     # get by double-clicking or running this file with no arguments. The root shim has
     # always defaulted to Sync - this file disagreeing with it meant the destructive
     # path was the default on the one entry point that had no guard rail.
-    [ValidateSet('Initialize','Sync')][string]$Mode = 'Sync',
+    # Report writes nothing at all. It resolves every path, detects which runtimes are
+    # present, and prints exactly what Initialize would touch - including the settings
+    # files it would edit and the hook line it would add. Run it first.
+    [ValidateSet('Initialize','Sync','Report')][string]$Mode = 'Sync',
     [string]$VaultRoot = (Join-Path $env:USERPROFILE 'iCloudDrive\iCloud~md~obsidian\Vault_AI'),
     [string]$ClaudeRoot = (Join-Path $env:USERPROFILE 'Documents\Claude'),
     [string]$ClaudeHome = (Join-Path $env:USERPROFILE '.claude'),
@@ -109,7 +112,7 @@ function Get-MachineKey([string]$explicit) {
     if (-not $clean) { throw "Machine key '$raw' contains no usable characters. Pass -MachineKey." }
     return $clean
 }
-function Get-MachineFingerprint([string]$root) {
+function Get-MachineFingerprint([string]$root, [switch]$ReadOnly) {
     # A value unique to this installation, generated once and kept out of the vault.
     $path = Join-Path $root 'machine-id'
     if (Test-Path -LiteralPath $path) {
@@ -117,6 +120,9 @@ function Get-MachineFingerprint([string]$root) {
         if ($existing) { $existing = $existing.Trim() }
         if ($existing) { return $existing }
     }
+    # Report mode must not create it: a mode that promises to write nothing cannot leave
+    # a file behind, however small.
+    if ($ReadOnly) { return '(not yet assigned)' }
     $id = [Guid]::NewGuid().ToString('N')
     Ensure-Dir $root
     [IO.File]::WriteAllText($path, $id, (New-Object System.Text.UTF8Encoding))
@@ -413,10 +419,10 @@ if (-not (Test-Path -LiteralPath $VaultRoot)) {
         }
         Ensure-Dir $VaultRoot
     }
-    else { throw "Vault not found: $VaultRoot" }
+    elseif ($Mode -ne 'Report') { throw "Vault not found: $VaultRoot" }
 }
 $machine = Get-MachineKey $MachineKey
-$machineFingerprint = Get-MachineFingerprint $MirrorRoot
+$machineFingerprint = Get-MachineFingerprint $MirrorRoot -ReadOnly:($Mode -eq 'Report')
 $manifestPath = Join-Path $shared ('sync\sync-manifest-' + $machine + '.json')
 $logPath = Join-Path $shared ('sync\sync-log-' + $machine + '.md')
 $sharedIndexName = 'MEMORY-' + $machine + '.md'
@@ -426,7 +432,7 @@ $sharedIndexName = 'MEMORY-' + $machine + '.md'
 # may be reading the old name. Nothing is removed; the stale copies are reported once.
 $legacyKey = $env:USERNAME
 $legacyLeftovers = @()
-if ($legacyKey -and $legacyKey -ne $machine) {
+if ($Mode -ne 'Report' -and $legacyKey -and $legacyKey -ne $machine) {
     $pairs = @(
         @{ old = (Join-Path $shared ('sync\sync-manifest-' + $legacyKey + '.json')); new = $manifestPath },
         @{ old = (Join-Path $shared ('sync\sync-log-' + $legacyKey + '.md'));        new = $logPath },
@@ -477,6 +483,76 @@ $hasClaudeRoot = Test-Path -LiteralPath $ClaudeRoot
 $hasCodex = Test-Path -LiteralPath $CodexHome
 if (-not $hasClaudeRoot) { Write-Warning "Claude project root not found, skipping its skill source: $ClaudeRoot" }
 if (-not $hasCodex) { Write-Warning "Codex home not found, skipping Codex publication: $CodexHome" }
+
+if ($Mode -eq 'Report') {
+    # Everything this prints is derived from the same variables the real run uses, so it
+    # cannot drift from what actually happens by describing it separately. It writes
+    # nothing - tests/Wave0.Tests.ps1 asserts that by listing the whole tree before and
+    # after, because a dry run that quietly touches something is worse than none at all.
+    $hookLine = 'powershell -NoProfile -ExecutionPolicy Bypass -File "' + $syncScript + '" -Mode Sync'
+    function Show-Target([string]$label, [string]$path, [bool]$exists) {
+        $state = if ($exists) { 'present' } else { 'MISSING - would be skipped' }
+        Write-Host ("  {0,-22} {1}" -f ($label + ':'), $path)
+        Write-Host ("  {0,-22} {1}" -f '', $state)
+    }
+
+    Write-Host ''
+    Write-Host 'DOTORI - what Initialize would do on this machine' -ForegroundColor Cyan
+    Write-Host 'Nothing below has been written. This mode only looks.'
+    Write-Host ''
+
+    Write-Host 'Identity' -ForegroundColor Cyan
+    Write-Host ("  machine key            {0}" -f $machine)
+    Write-Host ("  from                   {0}" -f $(if ($MachineKey) { '-MachineKey' } else { 'COMPUTERNAME' }))
+    Write-Host ''
+
+    Write-Host 'Locations' -ForegroundColor Cyan
+    Show-Target 'vault' $VaultRoot (Test-Path -LiteralPath $VaultRoot)
+    Show-Target 'local working area' $MirrorRoot (Test-Path -LiteralPath $MirrorRoot)
+    Write-Host ("  {0,-22} {1}" -f 'git directory:', (Join-Path $MirrorRoot 'vault-ai.git'))
+    Write-Host ("  {0,-22} {1}" -f 'settings backups:', $backupRoot)
+    Write-Host ''
+
+    Write-Host 'Runtimes it would publish into' -ForegroundColor Cyan
+    Show-Target 'claude home' $ClaudeHome (Test-Path -LiteralPath $ClaudeHome)
+    Show-Target 'claude project root' $ClaudeRoot $hasClaudeRoot
+    Show-Target 'codex home' $CodexHome $hasCodex
+    Show-Target 'antigravity rules dir' $AntigravityHome (Test-Path -LiteralPath $AntigravityHome)
+    Write-Host ''
+
+    Write-Host 'Settings files it would EDIT' -ForegroundColor Yellow
+    Write-Host '  This is the part worth reading twice. A backup of each is written to'
+    Write-Host ("  {0} first, and the {1} most recent are kept." -f $backupRoot, $KeepBackups)
+    $settings = @((Join-Path $ClaudeHome 'settings.json'))
+    if ($hasCodex) { $settings += (Join-Path $CodexHome 'hooks.json') }
+    foreach ($f in $settings) {
+        if (Test-Path -LiteralPath $f) {
+            Write-Host ("  EDIT    {0}" -f $f)
+        } else {
+            Write-Host ("  skip    {0} (does not exist - not created)" -f $f)
+        }
+    }
+    Write-Host '  Added to SessionStart and Stop:'
+    Write-Host ("    {0}" -f $hookLine)
+    Write-Host ''
+
+    Write-Host 'Inside the vault' -ForegroundColor Cyan
+    Write-Host '  agents\, skills\, memory\, sync\ are created if absent.'
+    Write-Host '  Your existing agents and skills are copied in from the runtime homes above,'
+    Write-Host '  and from then on the vault is the source: a local edit to a published copy'
+    Write-Host '  is overwritten on the next run. Edit the vault copy, not the runtime copy.'
+    Write-Host ("  This script is installed to {0}" -f $installTarget)
+    Write-Host ''
+
+    Write-Host 'What it does NOT do' -ForegroundColor Cyan
+    Write-Host '  No network calls. Nothing is uploaded; the vault is a folder your own sync'
+    Write-Host '  client happens to replicate. No files are deleted, here or in the vault.'
+    Write-Host '  No git remote is added unless you pass -VaultGitOrigin.'
+    Write-Host ''
+    Write-Host 'To undo an install, see the uninstall section in README.md.'
+    Write-Host ''
+    return
+}
 
 if ($Mode -eq 'Initialize') {
     Ensure-Dir $shared

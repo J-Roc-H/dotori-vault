@@ -239,6 +239,52 @@ You verify. You do not implement.
     }
 }
 
+Describe 'Report mode writes nothing' {
+    It 'leaves every file and directory exactly as it found them' {
+        # The whole value of a pre-flight report is that you can trust it not to act. That
+        # is only worth claiming if something checks it, so this lists the entire tree
+        # before and after - the runtime homes and the mirror included, not just the vault.
+        $w = Register-Workspace (New-Workspace)
+        New-Memory $w.A.MemoryDir 'mem-one' 'body'
+        $settings = Join-Path $w.A.ClaudeHome 'settings.json'
+        [IO.File]::WriteAllText($settings, '{"hooks":{}}', (New-Object System.Text.UTF8Encoding))
+
+        function Get-Snapshot([string]$root) {
+            Get-ChildItem -LiteralPath $root -Recurse -Force |
+                ForEach-Object { $_.FullName + '|' + $(if ($_.PSIsContainer) { 'dir' } else { $_.Length }) } |
+                Sort-Object
+        }
+        $before = @(Get-Snapshot $w.Root)
+        $before.Count | Should -BeGreaterThan 0
+
+        Invoke-Sync $w.A $w.Vault 'Report'
+
+        (@(Get-Snapshot $w.Root) -join "`n") | Should -Be ($before -join "`n")
+        [IO.File]::ReadAllText($settings) | Should -Be '{"hooks":{}}'
+    }
+
+    It 'names the settings file it would edit and the hook it would add' {
+        $w = Register-Workspace (New-Workspace)
+        $out = & $global:RealScript -Mode Report -VaultRoot $w.Vault `
+            -ClaudeRoot $w.A.ClaudeRoot -ClaudeHome $w.A.ClaudeHome `
+            -CodexHome $w.A.CodexHome -AntigravityHome $w.A.Antigrav `
+            -MirrorRoot $w.A.Mirror -MachineKey $w.A.Key `
+            -WarningAction SilentlyContinue 6>&1 | Out-String
+
+        $out | Should -Match 'settings\.json'
+        $out | Should -Match '-Mode Sync'
+        $out | Should -Match ([regex]::Escape($w.A.Key))
+    }
+
+    It 'does not create the machine fingerprint file' {
+        # It lives outside the vault and is generated on first real run; a report that
+        # created it would have quietly made the machine "already installed".
+        $w = Register-Workspace (New-Workspace)
+        Invoke-Sync $w.A $w.Vault 'Report'
+        (Join-Path $w.A.Mirror 'machine-id') | Should -Not -Exist
+    }
+}
+
 Describe 'Deletions are not propagated (invariant 2)' {
     It 'restores a memory deleted locally rather than removing it from the vault' {
         $w = Register-Workspace (New-Workspace)

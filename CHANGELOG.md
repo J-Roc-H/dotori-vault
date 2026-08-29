@@ -62,6 +62,23 @@ person who wrote it. Every one of them is invisible on the machine it grew up on
 
 ### Added
 
+- **`-Mode Report`** — a pre-flight that writes nothing. It resolves every path, says which
+  runtimes it found, and names the settings files it would edit along with the exact hook
+  line it would add. Everything it prints is derived from the same variables the real run
+  uses, so it cannot describe one thing and do another, and a test lists the entire tree
+  before and after to confirm it leaves nothing behind — including the machine identity
+  file, which a report that created it would have quietly turned into "already installed".
+  This is the first thing the install instructions now tell you to run: the tool's opening
+  move is editing the config of the agent you depend on daily, and until now there was no
+  way to look first.
+- **An uninstall section in the README.** Three steps, one of which is "keep your vault, it
+  is plain Markdown". Reversibility was true the whole time and written down nowhere.
+- **[docs/quickstart.md](docs/quickstart.md)** — ten minutes on a scratch path. It builds
+  two machines in a temp folder and walks through publication, cross-machine memory, a real
+  conflict refusing to merge, and the key-collision guard, then deletes the lot. It is not a
+  special demo mode: every path is a parameter, so this is the ordinary install aimed
+  somewhere disposable. Previously the only way to find out whether this worked for you was
+  to install it on the machine you actually care about.
 - `CONTRIBUTING.md` — what the project takes (mechanism, not domain content), the two
   reports worth the most, and a plain statement of how much maintenance to expect. Also
   what happens to your data if the project stops, which is the question a one-maintainer

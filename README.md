@@ -108,15 +108,28 @@ Nothing is added inside the vault.
 
 ## Install
 
-1. Copy `sync-ai-shared.ps1` (the shim) and `scripts\sync-ai-shared.ps1` into your vault
+1. **Look first.** `-Mode Report` writes nothing at all — it resolves every path, says
+   which runtimes it found, and names the settings files it would edit and the exact hook
+   line it would add:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "<repo>\sync-ai-shared.ps1" `
+  -Mode Report -VaultRoot "D:\my-vault"
+```
+
+   Everything it prints comes from the same variables the real run uses, so it cannot
+   describe one thing and do another. A test lists the whole tree before and after to
+   confirm it leaves nothing behind.
+
+2. Copy `sync-ai-shared.ps1` (the shim) and `scripts\sync-ai-shared.ps1` into your vault
    root and `scripts\` respectively.
-2. Run once to seed the folders and install the session hooks:
+3. Run once to seed the folders and install the session hooks:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File "<vault>\sync-ai-shared.ps1" -Mode Initialize
 ```
 
-3. After that it runs itself at the start of every session.
+4. After that it runs itself at the start of every session.
 
 **Install your agent runtimes first.** The hook that makes step 3 true is written into
 each runtime's own settings file, and this will not create a settings file that a runtime
@@ -124,7 +137,7 @@ has not written yet — fabricating one is a good way to overwrite defaults it h
 chosen. If a runtime is missing, the run says so and skips it; install the runtime, then
 run this again.
 
-**Read this before step 2.** `-Mode Initialize` writes session hooks into your agent
+**Read this before step 3.** `-Mode Initialize` writes session hooks into your agent
 runtimes' settings files. It is not a dry run. If you want to see what it would touch
 first, read the `Add-HookCommand` calls at the bottom of `scripts\sync-ai-shared.ps1`.
 
@@ -176,6 +189,7 @@ nothing to decide.
 
 | Document | What it covers |
 |---|---|
+| [docs/quickstart.md](docs/quickstart.md) | Ten minutes on a scratch path: see it work without touching your setup |
 | [docs/spec.md](docs/spec.md) | The on-disk contract, for writing another implementation |
 | [docs/multi-machine.md](docs/multi-machine.md) | How machines and runtimes scale, and why neither is a fixed list |
 | [docs/routing.md](docs/routing.md) | Giving an agent the context for the task instead of everything |
@@ -221,6 +235,30 @@ no such gate ships here. Do not read this tool as having a safety net it does no
 The last one is the general rule this project keeps relearning: a check that runs every
 time beats an intention to be careful. If you publish anything derived from your vault,
 write the check before you need it.
+
+## Uninstalling
+
+Nothing here is hard to reverse, but the steps are worth writing down rather than leaving
+you to work them out from the source.
+
+1. **Remove the hooks.** In each runtime's settings file — `%USERPROFILE%\.claude\settings.json`,
+   and `%USERPROFILE%\.codex\hooks.json` if you use Codex — delete the `SessionStart` and
+   `Stop` entries whose command mentions `sync-ai-shared.ps1`. The installer backed each
+   file up before its first edit, under `%USERPROFILE%\.ai-shared-sync\backups\<timestamp>\`,
+   so you can also restore one of those.
+
+2. **Delete the local working area** if you want the git history gone:
+   `%USERPROFILE%\.ai-shared-sync\`. This holds the mirror repository, the settings
+   backups, and this machine's identity file. Deleting it loses the vault's version
+   history on this machine and nothing else.
+
+3. **Keep or delete the vault**, as you prefer. It is your content in plain Markdown, and
+   nothing outside it is needed to read it. The published copies inside each runtime's own
+   folders — `agents\`, `skills\` — stay where they are and keep working; they simply stop
+   being updated.
+
+That is all of it. There is no service to cancel, no registry key, and nothing running in
+the background between sessions.
 
 ## Where the code lives
 
