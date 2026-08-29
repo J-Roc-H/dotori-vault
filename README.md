@@ -188,6 +188,8 @@ nothing to decide.
 | [docs/evolution.md](docs/evolution.md) | How this architecture arrived at its current shape |
 | [human-vault/](human-vault/README.md) | The human side: folder skeleton and templates |
 | [examples/sample-workspace/](examples/sample-workspace/README.md) | A miniature of both vaults, with invented content |
+| [brain-git.ps1](brain-git.ps1) | Reading and rolling back the vault's git history by hand |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | What this project takes, what it does not, and how fast to expect a reply |
 | [CHANGELOG.md](CHANGELOG.md) | What changed and why |
 
 If you only read one, read [docs/evolution.md](docs/evolution.md). The code is specific to
@@ -202,10 +204,11 @@ cloud-synced folder, and optionally into a git remote. Both are exfiltration pat
 as an employer is concerned, however innocuous the content feels. Whether that is
 acceptable is a policy question, not a technical one, and it is yours to answer first.
 
-**The publish gate does not protect you here.** The allowlist and its fail-closed scrub
-exist for producing a *public* repository. They do not inspect what your vault holds, what
-the cloud folder receives, or what a private remote stores. Those carry whatever you put
-in the vault.
+**Nothing here inspects what you move.** There is no filter between your machine and the
+vault: whatever you put in the vault is what the cloud folder receives and what a private
+remote stores. Earlier revisions of this document referred to a publish gate that screened
+an extraction step; there is no extraction step any more (see *Where the code lives*), and
+no such gate ships here. Do not read this tool as having a safety net it does not have.
 
 **Practical separation that has held up:**
 
@@ -213,10 +216,24 @@ in the vault.
 |---|---|
 | Keep employer-specific values in configuration files that never sync | Hardcoding paths, naming rules, or team policy into shared skills and agents |
 | Write the shared skill generically, keep the specifics local | One skill that only makes sense inside one organization |
-| Add employer identifiers to the forbidden-pattern list, so the gate fails loudly if one ever reaches the public build | Trusting yourself to notice |
+| Add a check that fails loudly if an employer identifier ever reaches a shared file | Trusting yourself to notice |
 
-The last one is worth doing even if you never publish. A pattern that fails the build is a
-check that runs every time; an intention to be careful is not.
+The last one is the general rule this project keeps relearning: a check that runs every
+time beats an intention to be careful. If you publish anything derived from your vault,
+write the check before you need it.
+
+## Where the code lives
+
+**This repository is the code.** It is not an extract of a private one that gets scrubbed
+and copied out periodically — it was, briefly, and that arrangement had a defect worth
+naming: the author ran a private copy daily while publishing a different one, so the
+published code was the version nobody actually used. Every fault found in the first review
+after publication was of exactly that kind — real on a fresh machine, invisible on the one
+it grew up on.
+
+So the script here is the script the author runs. A vault holds content — skills, agents,
+memory — and that stays private; the code does not live there. If you find a bug, you are
+finding it in the same file its author runs.
 
 ## Known limitations
 

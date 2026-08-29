@@ -44,8 +44,28 @@ person who wrote it. Every one of them is invisible on the machine it grew up on
   parameter documented for bootstrapping a second machine could not be passed through the
   entry point the install instructions name.
 
+### Changed
+
+- **This repository is now the code, not an extract of it.** It was published as a scrubbed
+  subset of a private setup that its author kept running separately — which meant the
+  published version was the one nobody actually used, and every fault above is of exactly
+  that kind: real on a fresh machine, invisible on the one it grew up on. The script here
+  is now the script its author runs. A vault still holds private content; the code does not
+  live there. The publish gate that screened the old extraction step is gone with the step,
+  and README no longer refers to it as though it protects anyone.
+- **`brain-git.ps1` is usable by someone other than its author.** Both paths were
+  hardcoded, the vault path pointing at one particular iCloud folder with no way to
+  redirect it, so the file was dead weight in a public repository. Now `-VaultRoot` and
+  `-MirrorRoot`, defaulting to the same values the sync script uses. Its
+  `$Args` parameter, which shadowed the automatic variable of that name, is now `$GitArgs`.
+  It is also listed in the README, which it never was.
+
 ### Added
 
+- `CONTRIBUTING.md` — what the project takes (mechanism, not domain content), the two
+  reports worth the most, and a plain statement of how much maintenance to expect. Also
+  what happens to your data if the project stops, which is the question a one-maintainer
+  project owes an answer to.
 - `tests/` — regression tests pinning each of the above, plus a check that the shim and the
   implementation expose the same parameters. Not yet the conformance harness that
   `docs/spec.md` section 10 describes; that is the next step.
