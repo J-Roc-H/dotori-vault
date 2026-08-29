@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Ideas, setups, questions
+    url: https://github.com/J-Roc-H/dotori-vault/discussions
+    about: Lower bar than an issue, and easier to find later.

@@ -73,6 +73,29 @@ person who wrote it. Every one of them is invisible on the machine it grew up on
 
 ### Added
 
+- **The documented install is now executed, not just described.** Everything in `tests/`
+  exercised the implementation with paths pointed at a scratch tree, which left two things
+  nothing had ever run: the shim at the vault root — the entry point the instructions name,
+  and the path every session hook is baked with — and hook installation into a
+  `settings.json` that actually exists. The conformance tests have no settings file on
+  purpose, so they covered the skip path and not the writing path, which is the one that
+  edits a file the user depends on. `tests/Install.Tests.ps1` follows the README steps
+  literally on a clean runner and checks that the hooks land, point at the shim rather than
+  the implementation, leave unrelated settings alone, get backed up first, and that a second
+  run reports nothing to do. README said the install "has not been run on a genuinely fresh
+  Windows install"; now it runs on one every commit. That still does not replace a person
+  following the words — a test cannot tell whether an instruction was confusing.
+- **`docs/upgrading.md`** — what an existing installation has to do, which nothing described.
+  The documents covered the first run and not the second version: same shape of gap as the
+  rest of this audit. It walks the machine-key migration (copies, never moves, and the stale
+  copies are deleted by hand only after every machine has run once), says the existing hooks
+  need nothing, and warns that the three new counters will not read zero on an established
+  vault — a first upgrade surfacing a backlog is the counters working, not the upgrade
+  failing.
+- **Issue templates**, which `CONTRIBUTING.md` described and the repository did not have —
+  the same defect this project keeps finding in itself. The two that matter most are the
+  fresh-install report and the sync-service conflict-copy shape: both ask for knowledge that
+  cannot be obtained from here, which is what makes them worth someone's time.
 - **`skills/wrapup/`, and two counters that make it checkable.** This project's own rule is
   that a convention nobody counts is already broken. Auditing the documents against that
   rule found the reverse problem as well: several conventions had **no act** — the folders

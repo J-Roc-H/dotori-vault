@@ -108,6 +108,9 @@ Nothing is added inside the vault.
 
 ## Install
 
+**Already have DOTORI running?** [docs/upgrading.md](docs/upgrading.md) is the
+upgrade — the steps below are for a first install.
+
 1. **Look first.** `-Mode Report` writes nothing at all — it resolves every path, says
    which runtimes it found, and names the settings files it would edit and the exact hook
    line it would add:
@@ -192,6 +195,7 @@ nothing to decide.
 | Document | What it covers |
 |---|---|
 | [skills/wrapup/](skills/wrapup/SKILL.md) | The finishing routine: what to write down before you stop |
+| [docs/upgrading.md](docs/upgrading.md) | Already running it? The whole upgrade, and what the new counts will tell you |
 | [docs/quickstart.md](docs/quickstart.md) | Ten minutes on a scratch path: see it work without touching your setup |
 | [docs/spec.md](docs/spec.md) | The on-disk contract, for writing another implementation |
 | [docs/multi-machine.md](docs/multi-machine.md) | How machines and runtimes scale, and why neither is a fixed list |

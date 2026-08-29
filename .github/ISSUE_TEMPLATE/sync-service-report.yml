@@ -1,0 +1,34 @@
+name: Sync service conflict-copy shape
+description: Your cloud service names losing writes in a way the log does not recognise.
+title: "Conflict-copy shape: "
+labels: ["sync-service"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        When two machines write the same file, no sync service merges: it keeps one and
+        renames the other. Every service names that differently, and
+        [docs/multi-machine.md](../../docs/multi-machine.md) lists the shapes collected so
+        far — mostly from documentation, with only one service actually run against
+        long-term. **Adding a shape is a one-line change.** This is knowledge nobody can
+        get without a subscription to every service, so it can only come from you.
+  - type: input
+    id: service
+    attributes:
+      label: Which service
+      placeholder: "Box / pCloud / Nextcloud / ..."
+    validations: { required: true }
+  - type: input
+    id: shape
+    attributes:
+      label: What the renamed copy is called
+      description: Original filename, then the name the losing copy got.
+      placeholder: "notes.md  ->  notes (conflict 2026-01-01).md"
+    validations: { required: true }
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else about how it behaves
+      description: |
+        On-demand placeholders? Does it lock files while writing? Both cause real damage
+        and are worth knowing about even without a fix.
