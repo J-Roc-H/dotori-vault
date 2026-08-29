@@ -4,31 +4,52 @@
 # harness: docs/spec.md section 10 defines a five-point interoperability check that still
 # needs building on top of these.
 #
-# The script under test runs work at import time, so the functions are extracted and
-# evaluated in isolation rather than dot-sourced.
+# Pester 5+ splits discovery from run and does not carry file-scope variables across that
+# boundary, so every fixture lives in BeforeAll. The script under test does work at import
+# time, so its functions are extracted and defined in the global scope rather than
+# dot-sourced.
 
-$RepoRoot = Split-Path -Parent $PSScriptRoot
-$RealScript = Join-Path $RepoRoot 'scripts\sync-ai-shared.ps1'
-$ShimScript = Join-Path $RepoRoot 'sync-ai-shared.ps1'
-$RealText = [IO.File]::ReadAllText($RealScript)
-$ShimText = [IO.File]::ReadAllText($ShimScript)
+BeforeAll {
+    $script:RepoRoot   = Split-Path -Parent $PSScriptRoot
+    $script:RealScript = Join-Path $script:RepoRoot 'scripts\sync-ai-shared.ps1'
+    $script:ShimScript = Join-Path $script:RepoRoot 'sync-ai-shared.ps1'
+    $script:RealText   = [IO.File]::ReadAllText($script:RealScript)
+    $script:ShimText   = [IO.File]::ReadAllText($script:ShimScript)
 
-function Get-ParamNames([string]$text) {
-    $start = $text.IndexOf('param(')
-    $seg = $text.Substring($start)
-    $seg = $seg.Substring(0, $seg.IndexOf("`n)"))
-    $seg = ($seg -split "`n" | Where-Object { $_ -notmatch '^\s*#' }) -join "`n"
-    $names = [regex]::Matches($seg, '\$([A-Za-z][A-Za-z0-9]*)') |
-        ForEach-Object { $_.Groups[1].Value } | Where-Object { $_ -ne 'env' }
-    return @($names)
+    function global:Get-ParamNames([string]$text) {
+        $seg = $text.Substring($text.IndexOf('param('))
+        $seg = $seg.Substring(0, $seg.IndexOf("`n)"))
+        $seg = ($seg -split "`n" | Where-Object { $_ -notmatch '^\s*#' }) -join "`n"
+        $names = [regex]::Matches($seg, '\$([A-Za-z][A-Za-z0-9]*)') |
+            ForEach-Object { $_.Groups[1].Value } | Where-Object { $_ -ne 'env' }
+        return @($names)
+    }
+
+    function global:Import-FunctionFromScript([string]$text, [string]$name) {
+        $esc = [regex]::Escape($name)
+        # One-liners (Ensure-Dir) have no closing brace at column 0.
+        $m = [regex]::Match($text, '(?m)^function\s+' + $esc + '\b[^\r\n]*\{[^\r\n]*\}[^\r\n]*$')
+        if (-not $m.Success) {
+            $m = [regex]::Match($text, '(?ms)^function\s+' + $esc + '\b.*?^\}')
+        }
+        if (-not $m.Success) { throw "Function not found in script: $name" }
+        # Define globally so the It blocks can see it regardless of Pester scoping.
+        Invoke-Expression ($m.Value -replace ('^function\s+' + $esc), "function global:$name")
+    }
+
+    Import-FunctionFromScript $script:RealText 'Get-MachineKey'
+    Import-FunctionFromScript $script:RealText 'Ensure-Dir'
+    Import-FunctionFromScript $script:RealText 'Write-Utf8'
+    Import-FunctionFromScript $script:RealText 'Convert-ClaudeAgentToToml'
+
+    $script:Work = Join-Path ([IO.Path]::GetTempPath()) ('dotori-' + [Guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $script:Work -Force | Out-Null
 }
 
-function Import-FunctionFromScript([string]$text, [string]$name) {
-    # Grab "function <name> ... }" at column 0 - every function here is top-level.
-    $pattern = '(?ms)^function\s+' + [regex]::Escape($name) + '\b.*?^\}'
-    $m = [regex]::Match($text, $pattern)
-    if (-not $m.Success) { throw "Function not found in script: $name" }
-    Invoke-Expression $m.Value
+AfterAll {
+    if ($script:Work -and (Test-Path -LiteralPath $script:Work)) {
+        Remove-Item -LiteralPath $script:Work -Recurse -Force -ErrorAction SilentlyContinue
+    }
 }
 
 Describe 'Shim and implementation stay in step' {
@@ -36,19 +57,18 @@ Describe 'Shim and implementation stay in step' {
         # -VaultGitOrigin existed only in the implementation, so the parameter documented
         # for bootstrapping a second machine could not be passed through the shim the
         # install instructions tell you to call.
-        (Get-ParamNames $ShimText) -join ',' | Should -Be ((Get-ParamNames $RealText) -join ',')
+        (Get-ParamNames $script:ShimText) -join ',' |
+            Should -Be ((Get-ParamNames $script:RealText) -join ',')
     }
     It 'defaults to Sync on both entry points' {
         # The implementation defaulted to Initialize, so running it with no arguments took
         # the destructive path.
-        $RealText | Should -Match "\[string\]\`$Mode = 'Sync'"
-        $ShimText | Should -Match "\[string\]\`$Mode = 'Sync'"
+        $script:RealText | Should -Match "\[string\]\`$Mode = 'Sync'"
+        $script:ShimText | Should -Match "\[string\]\`$Mode = 'Sync'"
     }
 }
 
 Describe 'Machine identity (docs/spec.md section 3)' {
-    BeforeAll { Import-FunctionFromScript $RealText 'Get-MachineKey' }
-
     It 'derives the key from the machine, not the account' {
         Get-MachineKey '' | Should -Be ($env:COMPUTERNAME -replace '[^A-Za-z0-9._-]', '-')
     }
@@ -63,51 +83,43 @@ Describe 'Machine identity (docs/spec.md section 3)' {
         { Get-MachineKey '\\\\' } | Should -Throw
     }
     It 'records a fingerprint in the manifest so a collision is detectable' {
-        $RealText | Should -Match 'machineFingerprint = \$machineFingerprint'
+        $script:RealText | Should -Match 'machineFingerprint = \$machineFingerprint'
     }
     It 'stops instead of adopting another machine baseline' {
-        $RealText | Should -Match 'Machine key collision'
+        $script:RealText | Should -Match 'Machine key collision'
     }
 }
 
 Describe 'Write-Utf8 replaces atomically' {
-    BeforeAll {
-        Import-FunctionFromScript $RealText 'Ensure-Dir'
-        Import-FunctionFromScript $RealText 'Write-Utf8'
-        $script:Work = Join-Path ([IO.Path]::GetTempPath()) ('dotori-' + [Guid]::NewGuid().ToString('N'))
-        New-Item -ItemType Directory -Path $script:Work -Force | Out-Null
-    }
-    AfterAll { Remove-Item -LiteralPath $script:Work -Recurse -Force -ErrorAction SilentlyContinue }
-
     It 'does not reach the target through a bare in-place copy' {
         # docs/multi-machine.md promised a rename; the code used [IO.File]::Copy, which
         # opens and rewrites the destination in place - the very write it claimed to avoid.
-        $RealText | Should -Match '\[IO\.File\]::Replace'
-        $RealText | Should -Match '\[IO\.File\]::Move'
+        $script:RealText | Should -Match '\[IO\.File\]::Replace'
+        $script:RealText | Should -Match '\[IO\.File\]::Move'
     }
     It 'creates a new file with the exact content and no BOM' {
         $target = Join-Path $script:Work 'new.md'
-        Write-Utf8 $target "hello"
+        Write-Utf8 $target 'hello'
         [IO.File]::ReadAllText($target) | Should -Be 'hello'
-        (Get-Content -LiteralPath $target -Encoding Byte -TotalCount 3) -join ',' | Should -Not -Be '239,187,191'
+        (Get-Content -LiteralPath $target -Encoding Byte -TotalCount 3) -join ',' |
+            Should -Not -Be '239,187,191'
     }
     It 'overwrites an existing file and leaves no temp file behind' {
         $target = Join-Path $script:Work 'existing.md'
-        Write-Utf8 $target "first"
-        Write-Utf8 $target "second"
+        Write-Utf8 $target 'first'
+        Write-Utf8 $target 'second'
         [IO.File]::ReadAllText($target) | Should -Be 'second'
         @(Get-ChildItem -LiteralPath $script:Work -Filter '*.tmp-*').Count | Should -Be 0
     }
 }
 
 Describe 'Agent conversion keeps what the definition declares' {
-    BeforeAll { Import-FunctionFromScript $RealText 'Convert-ClaudeAgentToToml' }
-
     It 'reads a plain scalar description' {
         # The repository's own example agent is this shape and converted to
         # description = "" without a warning.
         $raw = "---`nname: r`ndescription: Reviews a draft before it ships.`ntools: Read, Glob`n---`nBody."
-        Convert-ClaudeAgentToToml $raw 'r' | Should -Match 'description = "Reviews a draft before it ships\."'
+        Convert-ClaudeAgentToToml $raw 'r' |
+            Should -Match 'description = "Reviews a draft before it ships\."'
     }
     It 'reads a folded description' {
         $raw = "---`nname: r`ndescription: >`n  Diagnoses crashes`n  from logs.`ntools: Read`n---`nBody."
@@ -119,7 +131,7 @@ Describe 'Agent conversion keeps what the definition declares' {
         Convert-ClaudeAgentToToml $raw 'r' | Should -Match 'tools = \["Read", "Glob", "Grep"\]'
     }
     It 'converts the example agent shipped in this repository' {
-        $sample = Join-Path $RepoRoot 'examples\sample-workspace\ai-vault\agents\example-reviewer.md'
+        $sample = Join-Path $script:RepoRoot 'examples\sample-workspace\ai-vault\agents\example-reviewer.md'
         $toml = Convert-ClaudeAgentToToml ([IO.File]::ReadAllText($sample)) 'example-reviewer'
         $toml | Should -Not -Match 'description = ""'
     }
@@ -129,9 +141,9 @@ Describe 'Session hooks are installed deliberately' {
     It 'only writes hooks in Initialize mode' {
         # The Stop hook fires after every turn, so an ungated installer rewrote the
         # runtime settings file continuously.
-        $RealText | Should -Match "(?s)if \(\`$Mode -eq 'Initialize'\) \{\s*\r?\n\s*Add-HookCommand"
+        $script:RealText | Should -Match "(?s)if \(\`$Mode -eq 'Initialize'\) \{\s*\r?\n\s*Add-HookCommand"
     }
     It 'leaves the settings file untouched when the hook is already correct' {
-        $RealText | Should -Match 'if \(\$current -eq \$rendered\) \{ return \}'
+        $script:RealText | Should -Match 'if \(\$current -eq \$rendered\) \{ return \}'
     }
 }
