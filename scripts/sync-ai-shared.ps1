@@ -213,7 +213,11 @@ function Write-Utf8([string]$p, [string]$text) {
         [IO.File]::WriteAllText($tmp, $text, $enc)
         if (Test-Path -LiteralPath $p) {
             try {
-                [IO.File]::Replace($tmp, $p, $null)
+                # [NullString]::Value, not $null: PowerShell converts $null to an empty
+                # string when binding a .NET [string] parameter, and Replace rejects that
+                # with "The path is not of a legal form" - so every overwrite silently took
+                # the non-atomic fallback below. The warning is what made that visible.
+                [IO.File]::Replace($tmp, $p, [NullString]::Value)
             } catch {
                 Write-Warning ("Atomic replace unavailable for $p (" + $_.Exception.Message +
                     "); falling back to a non-atomic copy.")
@@ -446,8 +450,16 @@ $machineCollision = $null
 if (Test-Path -LiteralPath $manifestPath) {
     try {
         $probe = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
-        if ($probe.machineFingerprint -and $probe.machineFingerprint -ne $machineFingerprint) {
-            $machineCollision = $probe.machineFingerprint
+        # Ask whether the property exists rather than reading it blind: a manifest written
+        # before fingerprints existed has no such key, and under StrictMode reading it
+        # throws. That was landing in the catch below, so a legacy manifest skipped the
+        # check for the right reason by the wrong mechanism.
+        $recorded = $null
+        if ($probe.PSObject.Properties['machineFingerprint']) {
+            $recorded = $probe.PSObject.Properties['machineFingerprint'].Value
+        }
+        if ($recorded -and $recorded -ne $machineFingerprint) {
+            $machineCollision = $recorded
         }
     } catch { }
 }
@@ -847,7 +859,10 @@ $statusParts = @($statusCounts.Keys | Sort-Object | ForEach-Object { $_ + '=' + 
 $lifecycleSummary = ($statusParts -join ' ') + ' / no-status=' + $missingStatus.Count
 # Whatever sync client is underneath, ask the folder what it did. Nobody here can test
 # against every service, but a count in the log means an untested one still reports itself.
-$cloudConflictCopies = Find-ConflictCopies $shared
+# @(...) at the call site: PowerShell unrolls an empty array returned from a function into
+# $null, and $null.Count is an error under Set-StrictMode. Harmless without it, which is
+# why it survived - the conformance harness runs strict on purpose.
+$cloudConflictCopies = @(Find-ConflictCopies $shared)
 
 # handoff\ is a deliberate cross-machine inbox, not a memory file - it is never synced,
 # indexed, or recalled automatically (2026-08-18: confirmed no other code path reads it).

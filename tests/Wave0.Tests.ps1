@@ -104,6 +104,20 @@ Describe 'Write-Utf8 replaces atomically' {
         (Get-Content -LiteralPath $target -Encoding Byte -TotalCount 3) -join ',' |
             Should -Not -Be '239,187,191'
     }
+    It 'actually takes the atomic path, not the fallback' {
+        # The fallback exists for filesystems that cannot do an atomic replace, and it warns
+        # when it fires. It fired on every overwrite: [IO.File]::Replace was being handed
+        # $null for its backup-path argument, PowerShell bound that as an empty string, and
+        # Replace rejected it. The fix was invisible without this assertion - the file
+        # contents were correct either way, and only the warning said the guarantee was gone.
+        $target = Join-Path $script:Work 'atomic.md'
+        Write-Utf8 $target 'first'
+        # Write-Utf8 is a plain function, so -WarningVariable does not apply to it; 3>&1
+        # merges the warning stream into output, and the function returns nothing otherwise.
+        $emitted = Write-Utf8 $target 'second' 3>&1
+        ($emitted | Where-Object { $_ -is [System.Management.Automation.WarningRecord] }) |
+            Should -BeNullOrEmpty
+    }
     It 'overwrites an existing file and leaves no temp file behind' {
         $target = Join-Path $script:Work 'existing.md'
         Write-Utf8 $target 'first'
