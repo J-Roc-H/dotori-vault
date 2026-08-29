@@ -304,10 +304,15 @@ Describe 'Counting the conventions the docs insist on' {
 
         Invoke-Sync $w.A $w.Vault 'Initialize'
 
+        # Assert against the section, not the whole log: a name can legitimately appear in
+        # another section for another reason, and a whole-log negative would then be
+        # testing the log's layout rather than the counter's judgement.
         $log = Get-SyncLog $w.A $w.Vault
         $log | Should -Match 'unevidenced=1'
-        $log | Should -Match 'unbacked-one'
-        $log | Should -Not -Match '- honest-one'
+        $section = ($log -split '## Claimed verified without evidence')[1]
+        $section | Should -Match 'unbacked-one'
+        $section | Should -Not -Match 'honest-one'
+        $section | Should -Not -Match 'plain-one'
     }
 
     It 'does not count active as needing evidence' {
@@ -334,10 +339,13 @@ Describe 'Counting the conventions the docs insist on' {
 
         Invoke-Sync $w.A $w.Vault 'Initialize'
 
+        # Both files are new to this machine, so both appear under "New handoff files".
+        # The question here is which one the STALE section names, so read that section.
         $log = Get-SyncLog $w.A $w.Vault
         $log | Should -Match 'Handoffs older than 14 days: 1'
-        $log | Should -Match 'handoff-machine-b-old'
-        $log | Should -Not -Match '- handoff-machine-b-new'
+        $section = ($log -split '## Handoffs left in place')[1]
+        $section | Should -Match 'handoff-machine-b-old'
+        $section | Should -Not -Match 'handoff-machine-b-new'
     }
 }
 
