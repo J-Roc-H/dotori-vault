@@ -1,6 +1,11 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('Initialize','Sync')][string]$Mode = 'Initialize',
+    # Default is Sync, not Initialize. Initialize reseeds folders and writes session
+    # hooks into runtime settings files; it must be an explicit choice, never what you
+    # get by double-clicking or running this file with no arguments. The root shim has
+    # always defaulted to Sync - this file disagreeing with it meant the destructive
+    # path was the default on the one entry point that had no guard rail.
+    [ValidateSet('Initialize','Sync')][string]$Mode = 'Sync',
     [string]$VaultRoot = (Join-Path $env:USERPROFILE 'iCloudDrive\iCloud~md~obsidian\Vault_AI'),
     [string]$ClaudeRoot = (Join-Path $env:USERPROFILE 'Documents\Claude'),
     [string]$ClaudeHome = (Join-Path $env:USERPROFILE '.claude'),
@@ -16,6 +21,22 @@ param(
     # Local-only working area. Never inside the vault: backups hold runtime settings
     # (Layer A) and the git dir must not be synced by iCloud between machines.
     [string]$MirrorRoot = (Join-Path $env:USERPROFILE '.ai-shared-sync'),
+    # Identifies this machine. Three files are named from it (manifest, log, memory
+    # index) and docs/spec.md section 3 requires the value be stable across runs AND
+    # distinct between machines.
+    #
+    # This was $env:USERNAME until now, which satisfies only the first half: USERNAME is
+    # an ACCOUNT name, not a machine name. Two machines signed in as the same account -
+    # the same person's work and home PC, two boxes both using 'user' or 'Administrator',
+    # or one Microsoft account deriving the same local profile on both - collapse onto one
+    # set of filenames. That is exactly the failure docs/evolution.md section 5 records
+    # (64 conflict copies in 19 hours) and that per-machine naming exists to prevent, and
+    # it reports no error while it happens.
+    #
+    # COMPUTERNAME is the machine. Pass -MachineKey to override it; whatever you pass must
+    # still be stable and unique, and Test-MachineIdentity below checks the uniqueness half
+    # rather than trusting it.
+    [string]$MachineKey = '',
     [int]$KeepBackups = 3
 )
 
@@ -36,8 +57,7 @@ $memory = Join-Path $shared 'memory\claude-handoff'
 # every three-way compare falls through to "both changed" and reports a conflict
 # instead of overwriting (see the memory block). Existing copies are seeded per machine
 # on migration so no baseline is lost.
-$manifestPath = Join-Path $shared ('sync\sync-manifest-' + $env:USERNAME + '.json')
-$logPath = Join-Path $shared ('sync\sync-log-' + $env:USERNAME + '.md')
+# $manifestPath / $logPath are set below, once the machine key is resolved.
 # The hook always points at the root shim, never at this file. Both machines have that
 # path baked into settings.json / hooks.json and a broken hook cannot self-repair.
 $syncScript = Join-Path $VaultRoot 'sync-ai-shared.ps1'
@@ -63,8 +83,46 @@ $vaultGitOrigin = $VaultGitOrigin
 # Each machine owns its own memory index. A single shared MEMORY.md would be
 # overwritten by whichever machine synced last, silently discarding the other's index.
 $localIndexName = 'MEMORY.md'
-$sharedIndexName = 'MEMORY-' + $env:USERNAME + '.md'
+# $sharedIndexName is set below, once the machine key is resolved.
 $memoryRel = 'memory\claude-handoff'
+
+# ---------------------------------------------------------------------------
+# Machine identity
+#
+# docs/spec.md section 3: the key must be stable across runs on this machine AND distinct
+# between machines. COMPUTERNAME gives both; USERNAME gave only the first. A key alone
+# cannot prove the second half though - two machines really can share a computer name -
+# so a fingerprint that no two machines can share is written next to the manifest and
+# checked every run. Without that check a collision is silent, and silent is what made
+# the original bug expensive.
+#
+# The fingerprint lives in MirrorRoot (local, never synced), for the same reason the git
+# dir does: it is per-machine state, and a synced copy would defeat its purpose.
+# ---------------------------------------------------------------------------
+function Get-MachineKey([string]$explicit) {
+    if ($explicit) { $raw = $explicit }
+    elseif ($env:COMPUTERNAME) { $raw = $env:COMPUTERNAME }
+    else { $raw = $env:USERNAME }
+    if (-not $raw) { throw 'Cannot determine a machine key. Pass -MachineKey explicitly.' }
+    # Filename-safe: this becomes part of three filenames inside the vault.
+    $clean = ($raw -replace '[^A-Za-z0-9._-]', '-').Trim('-')
+    if (-not $clean) { throw "Machine key '$raw' contains no usable characters. Pass -MachineKey." }
+    return $clean
+}
+function Get-MachineFingerprint([string]$root) {
+    # A value unique to this installation, generated once and kept out of the vault.
+    $path = Join-Path $root 'machine-id'
+    if (Test-Path -LiteralPath $path) {
+        $existing = (Get-Content -LiteralPath $path -Raw -ErrorAction SilentlyContinue)
+        if ($existing) { $existing = $existing.Trim() }
+        if ($existing) { return $existing }
+    }
+    $id = [Guid]::NewGuid().ToString('N')
+    Ensure-Dir $root
+    [IO.File]::WriteAllText($path, $id, (New-Object System.Text.UTF8Encoding))
+    return $id
+}
+
 
 function Hash-File([string]$p) {
     if (-not (Test-Path -LiteralPath $p)) { return $null }
@@ -136,15 +194,35 @@ function Backup-File([string]$p, [string]$root) {
     }
 }
 function Write-Utf8([string]$p, [string]$text) {
-    # Write to a temp file and rename over the target. Writing in place would truncate
-    # the original to 0 bytes if iCloud holds a lock mid-write (CORE_DEVREF #56).
+    # Write to a temp file and RENAME it over the target. Writing in place would truncate
+    # the original to 0 bytes if a cloud client holds a lock mid-write (CORE_DEVREF #56).
+    #
+    # This used [IO.File]::Copy($tmp, $p, $true), which is not a rename: Copy opens the
+    # destination and rewrites it in place - the exact non-atomic write the temp file was
+    # there to avoid. docs/multi-machine.md promised a rename; only now is it one.
+    #
+    # [IO.File]::Replace is the atomic path on NTFS and needs the target to exist;
+    # Move covers the create case. Both require same-volume paths, which is why $tmp is
+    # built beside $p rather than in a temp directory. If the filesystem underneath
+    # supports neither (some cloud FUSE mounts), fall back to Copy but SAY SO - a silent
+    # downgrade to the unsafe write is how this stopped being true the first time.
     Ensure-Dir (Split-Path $p)
     $enc = New-Object System.Text.UTF8Encoding
     $tmp = $p + '.tmp-' + [Guid]::NewGuid().ToString('N').Substring(0, 8)
     try {
         [IO.File]::WriteAllText($tmp, $text, $enc)
-        [IO.File]::Copy($tmp, $p, $true)
-        Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+        if (Test-Path -LiteralPath $p) {
+            try {
+                [IO.File]::Replace($tmp, $p, $null)
+            } catch {
+                Write-Warning ("Atomic replace unavailable for $p (" + $_.Exception.Message +
+                    "); falling back to a non-atomic copy.")
+                [IO.File]::Copy($tmp, $p, $true)
+            }
+        } else {
+            [IO.File]::Move($tmp, $p)
+        }
+        if (Test-Path -LiteralPath $tmp) { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }
     } catch {
         if (Test-Path -LiteralPath $tmp) { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }
         throw
@@ -177,11 +255,40 @@ function Convert-ClaudeAgentToToml([string]$raw, [string]$name) {
     if (-not $body.Success) { throw "Invalid agent frontmatter: $name" }
     $yaml = $body.Groups[1].Value
     $instructions = $body.Groups[2].Value.Trim()
-    $descMatch = [regex]::Match($yaml, '(?ms)^description:\s*>\s*(.*?)(?=^tools:|^model:|\z)')
-    $desc = ($descMatch.Groups[1].Value -replace '\r?\n\s+', ' ').Trim()
+    # Accept every YAML scalar style a real agent file uses, not just the one this
+    # author happens to write. Matching only 'description: >' (folded) meant a plain
+    # 'description: text' silently produced description = "" in the TOML - and the
+    # example agent shipped in examples/ is exactly that shape, so the repository's own
+    # sample data failed its own converter with no warning.
+    $descMatch = [regex]::Match($yaml, '(?ms)^description:[ \t]*[>|][-+]?[ \t]*\r?\n(.*?)(?=^\S|\z)')
+    if ($descMatch.Success) {
+        # Folded/literal block: join the indented continuation lines.
+        $desc = ($descMatch.Groups[1].Value -replace '\r?\n\s+', ' ').Trim()
+    } else {
+        # Plain or quoted scalar on the same line.
+        $descMatch = [regex]::Match($yaml, '(?m)^description:[ \t]*(.+?)[ \t]*$')
+        $desc = $descMatch.Groups[1].Value.Trim().Trim('"', "'")
+    }
+    if (-not $desc) {
+        # Never emit an empty description in silence. A runtime selects an agent by its
+        # description; an empty one is an agent that can never be chosen.
+        Write-Warning "Agent '$name' has no parseable description - the converted file will not be selectable."
+    }
     $quoted = $desc.Replace('\', '\\').Replace('"', '\"')
+    # tools: was dropped entirely by the previous converter, so an agent restricted to
+    # read-only tools in its source definition arrived at the other runtime unrestricted.
+    $toolsMatch = [regex]::Match($yaml, '(?m)^tools:[ \t]*(.+?)[ \t]*$')
+    $toolsLine = ''
+    if ($toolsMatch.Success) {
+        $toolList = @($toolsMatch.Groups[1].Value.Split(',') |
+            ForEach-Object { $_.Trim().Trim('"', "'") } | Where-Object { $_ })
+        if ($toolList.Count) {
+            $toolsLine = 'tools = [' + (($toolList | ForEach-Object { '"' + $_ + '"' }) -join ', ') + ']' + "`r`n"
+        }
+    }
     return 'name = "' + $name + '"' + "`r`n" +
         'description = "' + $quoted + '"' + "`r`n" +
+        $toolsLine +
         "developer_instructions = '''" + "`r`n" +
         $instructions.Replace("'''", "''\''") + "`r`n'''" + "`r`n"
 }
@@ -204,9 +311,6 @@ function Add-HookCommand([string]$jsonPath, [string]$command, [string]$hookName 
         $script:hooksSkipped += $jsonPath
         return
     }
-    $backup = Join-Path $backupRoot (Get-Date -Format 'yyyyMMdd-HHmmss')
-    Ensure-Dir $backup
-    Backup-File $jsonPath $backup
     $j = Get-Content -LiteralPath $jsonPath -Raw -Encoding UTF8 | ConvertFrom-Json
     if (-not $j.hooks) { $j | Add-Member NoteProperty hooks ([pscustomobject]@{}) }
     if (-not $j.hooks.$hookName) { $j.hooks | Add-Member NoteProperty $hookName @() }
@@ -219,7 +323,19 @@ function Add-HookCommand([string]$jsonPath, [string]$command, [string]$hookName 
     }
     $groups[0].hooks = $hooks
     $j.hooks.$hookName = $groups
-    Write-Utf8 $jsonPath ($j | ConvertTo-Json -Depth 20)
+    # Only write when the result actually differs. Every write here is a full
+    # ConvertFrom-Json/ConvertTo-Json round trip of somebody's live runtime settings, and
+    # PowerShell 5.1's serializer is not lossless (it escapes non-ASCII to \uXXXX,
+    # reformats, and truncates past -Depth). Doing that unconditionally meant a rewrite of
+    # settings.json on every single invocation. Comparing first makes the no-op case a
+    # read, which is what it should always have been.
+    $rendered = $j | ConvertTo-Json -Depth 20
+    $current = Get-Content -LiteralPath $jsonPath -Raw -Encoding UTF8
+    if ($current -eq $rendered) { return }
+    $backup = Join-Path $backupRoot (Get-Date -Format 'yyyyMMdd-HHmmss')
+    Ensure-Dir $backup
+    Backup-File $jsonPath $backup
+    Write-Utf8 $jsonPath $rendered
 }
 function Invoke-MirrorCommit([string]$summary) {
     # History for the vault without putting .git inside iCloud: the git dir lives in
@@ -295,6 +411,54 @@ if (-not (Test-Path -LiteralPath $VaultRoot)) {
     }
     else { throw "Vault not found: $VaultRoot" }
 }
+$machine = Get-MachineKey $MachineKey
+$machineFingerprint = Get-MachineFingerprint $MirrorRoot
+$manifestPath = Join-Path $shared ('sync\sync-manifest-' + $machine + '.json')
+$logPath = Join-Path $shared ('sync\sync-log-' + $machine + '.md')
+$sharedIndexName = 'MEMORY-' + $machine + '.md'
+
+# Migration from the USERNAME-keyed names. Seed rather than move: deletions are never
+# propagated (invariant 2), and an older implementation still running on another machine
+# may be reading the old name. Nothing is removed; the stale copies are reported once.
+$legacyKey = $env:USERNAME
+$legacyLeftovers = @()
+if ($legacyKey -and $legacyKey -ne $machine) {
+    $pairs = @(
+        @{ old = (Join-Path $shared ('sync\sync-manifest-' + $legacyKey + '.json')); new = $manifestPath },
+        @{ old = (Join-Path $shared ('sync\sync-log-' + $legacyKey + '.md'));        new = $logPath },
+        @{ old = (Join-Path $memory ('MEMORY-' + $legacyKey + '.md'));
+           new = (Join-Path $memory ('MEMORY-' + $machine + '.md')) }
+    )
+    foreach ($pair in $pairs) {
+        if ((Test-Path -LiteralPath $pair.old) -and -not (Test-Path -LiteralPath $pair.new)) {
+            Ensure-Dir (Split-Path $pair.new)
+            Copy-Item -LiteralPath $pair.old -Destination $pair.new -Force
+        }
+        if (Test-Path -LiteralPath $pair.old) { $legacyLeftovers += $pair.old }
+    }
+}
+
+# Collision check. If the manifest under this key was last written by a different
+# installation, two machines are sharing one key and each is about to overwrite the
+# other's baseline - the failure per-machine naming exists to prevent. Refuse rather
+# than proceed: a wrong baseline silently mis-reconciles memory.
+$machineCollision = $null
+if (Test-Path -LiteralPath $manifestPath) {
+    try {
+        $probe = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        if ($probe.machineFingerprint -and $probe.machineFingerprint -ne $machineFingerprint) {
+            $machineCollision = $probe.machineFingerprint
+        }
+    } catch { }
+}
+if ($machineCollision) {
+    throw ("Machine key collision: '$machine' is already in use by a different machine " +
+        "(fingerprint $machineCollision, this machine is $machineFingerprint). Two machines " +
+        "sharing one key overwrite each other's sync baseline and memory index, which is the " +
+        "failure per-machine naming exists to prevent - see docs/multi-machine.md. Pass " +
+        "-MachineKey with a name unique to this machine, for example: -MachineKey `"$machine-2`".")
+}
+
 # A missing consumer is not a failure: this hook runs at every session start and must
 # never take the session down just because one runtime is absent on this machine.
 $hasClaudeRoot = Test-Path -LiteralPath $ClaudeRoot
@@ -353,14 +517,21 @@ $old = $null
 if (Test-Path -LiteralPath $manifestPath) { $old = Get-Content $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json }
 $oldFiles = @{}
 if ($old -and $old.files) { foreach ($x in $old.files) { $oldFiles[$x.relative] = $x } }
-# handoffSeen is scoped per machine, keyed by $env:USERNAME (the same key MEMORY-<user>.md
+# handoffSeen is scoped per machine, keyed by the machine key (the same key MEMORY-<machine>.md
 # uses). The manifest is shared via iCloud, so a single flat list let whichever machine
 # synced first mark a handoff "seen" for both, and the recipient's "unread on this machine"
 # alert never fired (2026-08-18: exactly why <user> got no alert for a handoff <machine-1> wrote).
 # A legacy flat array is read as this machine's baseline so upgrading does not replay old
 # handoffs as new here.
-$me = $env:USERNAME
+# Keyed by the resolved machine key, not USERNAME. A manifest written under the old
+# USERNAME key was copied to the new name above, so its handoffSeen entry is still keyed
+# by the old value; carry that across once so upgrading does not replay old handoffs.
+$me = $machine
 $oldHandoffSeen = @{}
+if ($old -and $old.handoffSeen -and -not ($old.handoffSeen -is [Array]) -and
+        -not $old.handoffSeen.$me -and $legacyKey -and $old.handoffSeen.$legacyKey) {
+    $old.handoffSeen | Add-Member NoteProperty $me @($old.handoffSeen.$legacyKey) -Force
+}
 if ($old -and $old.handoffSeen) {
     if ($old.handoffSeen -is [Array]) {
         foreach ($h in $old.handoffSeen) { $oldHandoffSeen[$h] = $true }
@@ -721,6 +892,11 @@ $manifest = [ordered]@{
     schema = 2
     updated = (Get-Date).ToString('o')
     source = $shared
+    # Identifies the installation that wrote this manifest. Read back on the next run: a
+    # different value under the same machine key means two machines share the key and are
+    # overwriting each other's baseline. Without this the collision is silent.
+    machine = $machine
+    machineFingerprint = $machineFingerprint
     files = @($records)
     conflicts = @($conflicts)
     handoffSeen = $handoffSeenOut
@@ -737,12 +913,20 @@ $log = @("# AI shared sync log", "", (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), "
     "Skills synced: $skillFolderCount skill(s) / $($skillRecords.Count) file(s)",
     "Memory source: $memRoot",
     "Memory: pushed $memPushed / pulled $memPulled / normalized $memNormalized / conflicts $($memConflicts.Count)",
+    "Machine: $machine",
     "Conflicts: $($conflicts.Count)",
     "Invalid skill folders: $($invalidSkillFolders.Count)",
     "Mirror: $gitStatus",
     "Lifecycle: $lifecycleSummary",
     "Cloud conflict copies: $($cloudConflictCopies.Count)",
     "New handoff files: $($newHandoff.Count)")
+if ($legacyLeftovers.Count) {
+    $log += ''; $log += '## Superseded per-machine files'
+    $log += 'These are named from the old USERNAME-based machine key. Their contents were'
+    $log += 'copied to the new machine-keyed names; nothing was deleted. Remove them by hand'
+    $log += 'once every machine sharing this vault has run this version at least once.'
+    $log += ($legacyLeftovers | ForEach-Object { '- ' + $_ })
+}
 if ($newHandoff.Count) { $log += ''; $log += '## New handoff files'; $log += ($newHandoff | ForEach-Object { '- ' + $_ }) }
 if ($missingStatus.Count) { $log += ''; $log += '## Memory without lifecycle status'; $log += ($missingStatus | ForEach-Object { '- ' + $_ }) }
 if ($conflicts.Count) { $log += ''; $log += '## Conflicts'; $log += ($conflicts | ForEach-Object { '- ' + $_ }) }
@@ -758,12 +942,18 @@ Write-Utf8 $logPath ($log -join "`r`n")
 # Install the same sync command on both SessionStart (pull latest at start) and Stop
 # (push this session's changes back out) so the gap between a local edit and Vault_AI
 # seeing it is one turn, not "until the next session happens to start".
+# Installing hooks is an Initialize job, not something every Sync redoes. These calls sat
+# outside the mode check, so the Stop hook - which fires after every turn, not once per
+# session - re-entered the installer and rewrote the runtime's settings file continuously.
+# The hook, once written, persists; if it is ever removed, run -Mode Initialize again.
 $hookCommand = 'powershell -NoProfile -ExecutionPolicy Bypass -File "' + $syncScript + '" -Mode Sync'
-Add-HookCommand (Join-Path $ClaudeHome 'settings.json') $hookCommand 'SessionStart'
-Add-HookCommand (Join-Path $ClaudeHome 'settings.json') $hookCommand 'Stop'
-if ($hasCodex) {
-    Add-HookCommand (Join-Path $CodexHome 'hooks.json') $hookCommand 'SessionStart'
-    Add-HookCommand (Join-Path $CodexHome 'hooks.json') $hookCommand 'Stop'
+if ($Mode -eq 'Initialize') {
+    Add-HookCommand (Join-Path $ClaudeHome 'settings.json') $hookCommand 'SessionStart'
+    Add-HookCommand (Join-Path $ClaudeHome 'settings.json') $hookCommand 'Stop'
+    if ($hasCodex) {
+        Add-HookCommand (Join-Path $CodexHome 'hooks.json') $hookCommand 'SessionStart'
+        Add-HookCommand (Join-Path $CodexHome 'hooks.json') $hookCommand 'Stop'
+    }
 }
 if ($hooksSkipped.Count) {
     foreach ($p in ($hooksSkipped | Sort-Object -Unique)) {

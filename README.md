@@ -44,8 +44,9 @@ DOTORI keeps one source of truth and publishes it outward:
 ```
 
 **Neither dimension has a fixed size.** Two is the case it was built for, but nothing in
-the code counts machines — keys come from the account running the sync, so a third takes
-zero code changes. And it is useful on a single machine too, if what you want is several
+the code counts machines — keys come from the computer name, so a third takes
+zero code changes. If two of your machines share a computer name, pass `-MachineKey`; the
+run stops with an error rather than letting them overwrite each other. And it is useful on a single machine too, if what you want is several
 agents sharing one set of skills and definitions. A runtime that is not installed is
 skipped with a warning, never an error.
 
@@ -126,6 +127,9 @@ run this again.
 **Read this before step 2.** `-Mode Initialize` writes session hooks into your agent
 runtimes' settings files. It is not a dry run. If you want to see what it would touch
 first, read the `Add-HookCommand` calls at the bottom of `scripts\sync-ai-shared.ps1`.
+
+Only `Initialize` writes them. `Sync` — the mode the hook itself runs — reads those files
+and leaves them alone. If a hook is ever removed, run `Initialize` again to put it back.
 
 **The default paths are one person's setup**, including the vault location. Every one of
 them is a parameter — pass `-VaultRoot`, `-ClaudeHome`, `-CodexHome`, `-MirrorRoot` rather

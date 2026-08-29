@@ -1,0 +1,49 @@
+# Runs on Windows because that is the only platform the implementation targets. There is
+# no point testing it anywhere else: PowerShell 5.1 behaviour (ANSI decoding of BOM-less
+# scripts, ConvertTo-Json, [IO.File]::Replace) is the thing under test.
+name: ci
+
+on:
+  push:
+  workflow_dispatch:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run regression tests (Windows PowerShell 5.1)
+        shell: powershell
+        run: |
+          Set-StrictMode -Version Latest
+          Install-Module Pester -Force -Scope CurrentUser -SkipPublisherCheck -MinimumVersion 5.0.0
+          Import-Module Pester -MinimumVersion 5.0.0
+          $config = New-PesterConfiguration
+          $config.Run.Path = 'tests'
+          $config.Output.Verbosity = 'Detailed'
+          $config.Run.Exit = $true
+          Invoke-Pester -Configuration $config
+
+      - name: Lint
+        shell: powershell
+        run: |
+          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser -SkipPublisherCheck
+          # Errors fail the build; warnings are reported and do not.
+          $found = Invoke-ScriptAnalyzer -Path . -Recurse -Severity Error
+          $found | Format-Table -AutoSize
+          if ($found) { throw "PSScriptAnalyzer reported $($found.Count) error(s)." }
+
+      - name: Scripts must stay ASCII-only
+        shell: powershell
+        run: |
+          # PowerShell 5.1 decodes a BOM-less .ps1 as ANSI, so any non-ASCII literal in a
+          # script becomes mojibake at runtime. This is a build check because an intention
+          # to be careful is not one.
+          $bad = @()
+          Get-ChildItem -Path . -Recurse -Filter *.ps1 | ForEach-Object {
+              $bytes = [IO.File]::ReadAllBytes($_.FullName)
+              if ($bytes | Where-Object { $_ -gt 127 }) { $bad += $_.FullName }
+          }
+          if ($bad) { $bad; throw "Non-ASCII bytes found in $($bad.Count) script(s)." }

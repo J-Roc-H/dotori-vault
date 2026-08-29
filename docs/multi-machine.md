@@ -5,8 +5,8 @@ scale independently, and neither is a list somebody has to maintain.
 
 ## Machines
 
-A machine is identified by the account running the sync. Everything machine-specific is
-named from that key rather than enumerated:
+A machine is identified by the computer name. Everything machine-specific is named from
+that key rather than enumerated:
 
 | Artifact | Name |
 |---|---|
@@ -16,6 +16,21 @@ named from that key rather than enumerated:
 
 There is no machine count and no machine list anywhere in the code. Adding a machine is:
 install, run the sync once, done.
+
+Override it with `-MachineKey` if the computer names are not distinct.
+
+### Why not the account name
+
+It was, until recently. An account name identifies a person, not a machine, so two machines
+signed in as the same account -- the same person's work and home PC, two boxes both using
+`user`, or one cloud account deriving the same local profile on both -- shared one manifest,
+one log, and one memory index. That is exactly the failure the rest of this page describes,
+reintroduced by the naming scheme meant to prevent it, and it reported no error.
+
+Because any key can collide, the key is not trusted on its own. Each installation generates
+a value unique to itself, kept in the local working area and never synced, and records it in
+the manifest. If the manifest under this machine's key carries someone else's value, the run
+stops and says so rather than adopting a baseline that belongs to another machine.
 
 ### Why each machine gets its own manifest and log
 

@@ -7,6 +7,52 @@ history contains private material. What is preserved is the order and the reason
 
 First public extraction. Nothing has been released yet.
 
+### Fixed after the first public review
+
+Five faults found by reading the published tree as a stranger would, rather than as the
+person who wrote it. Every one of them is invisible on the machine it grew up on.
+
+- **The machine key was the account name.** `docs/spec.md` requires a key that is stable
+  across runs *and distinct between machines*; an account name gives only the first. Two
+  machines signed in as the same account shared one manifest, one log and one memory
+  index — the failure per-machine naming exists to prevent, reintroduced by the naming
+  scheme itself, reporting nothing while it happened. The key now comes from the computer
+  name, `-MachineKey` overrides it, and because any key can collide, each installation
+  writes a fingerprint into its manifest and refuses to run when it finds someone else's.
+  Files under the old key are copied to the new name, never moved: deletions are not
+  propagated, and another machine may still be reading them.
+- **The atomic write was not atomic.** `docs/multi-machine.md` promised every write went
+  to a temporary file and was renamed over the target. The code called `[IO.File]::Copy`,
+  which opens the destination and rewrites it in place — precisely the write the temporary
+  file existed to avoid. It is now `Replace` over an existing file and `Move` over a new
+  one, with a loud warning if the filesystem supports neither.
+- **Session hooks were reinstalled on every run.** The installer sat outside the mode
+  check, so `Sync` — which the `Stop` hook fires after *every turn*, not once per session —
+  re-entered it and rewrote the runtime's `settings.json` continuously through a
+  PowerShell 5.1 JSON round trip that is not lossless. Hooks are now written only by
+  `Initialize`, and the writer compares before writing.
+- **The agent converter only understood one YAML style.** It matched `description: >` and
+  nothing else. Every agent in the setup it was extracted from is written that way, so it
+  never surfaced there — but the example agent shipped in `examples/` is a plain scalar,
+  so the repository's own sample data converted to `description = ""` with no warning, and
+  `tools:` was dropped entirely, sending a read-only agent to another runtime
+  unrestricted. Both are fixed, and a missing description now warns instead of shipping an
+  agent nothing can select.
+- **The implementation defaulted to `Initialize`.** The shim defaulted to `Sync`; running
+  the implementation directly with no arguments took the destructive path. Both now
+  default to `Sync`. The shim was also missing `-VaultGitOrigin`, which meant the
+  parameter documented for bootstrapping a second machine could not be passed through the
+  entry point the install instructions name.
+
+### Added
+
+- `tests/` — regression tests pinning each of the above, plus a check that the shim and the
+  implementation expose the same parameters. Not yet the conformance harness that
+  `docs/spec.md` section 10 describes; that is the next step.
+- `.github/workflows/ci.yml` — runs those tests on `windows-latest`, lints with
+  PSScriptAnalyzer, and fails the build on any non-ASCII byte in a `.ps1` file. The
+  ASCII rule was previously an intention; it is now a check.
+
 ### The architecture at this point
 
 - Two vaults: one for human knowledge, one for agent operating state

@@ -17,8 +17,13 @@ param(
     [string]$ClaudeRoot,
     [string]$ClaudeHome,
     [string]$CodexHome,
+    # Must mirror scripts\sync-ai-shared.ps1 exactly. -VaultGitOrigin was missing here,
+    # which made the parameter documented for bootstrapping a second machine impossible
+    # to pass through the entry point the install instructions actually name.
+    [string]$VaultGitOrigin,
     [string]$AntigravityHome,
     [string]$MirrorRoot,
+    [string]$MachineKey,
     [int]$KeepBackups
 )
 
