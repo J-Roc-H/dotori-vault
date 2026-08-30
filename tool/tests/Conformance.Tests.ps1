@@ -360,17 +360,20 @@ Describe 'Counting the conventions the docs insist on' {
         # docs/candidates.md demands a verified finding before anything is promoted, so a
         # promotion claim with an empty evidence list is the same broken claim as a bare
         # verified. active alone would not be counted - the promotion is what pulls it in.
+        # Fixture names must not be substrings of one another: -Not -Match is a substring
+        # test, so naming these 'unbacked-promotion' and 'backed-promotion' made the
+        # negative assertion impossible to pass no matter what the script did.
         $w = Register-Workspace (New-Workspace)
-        New-Memory $w.A.MemoryDir 'unbacked-promotion' 'body' 'active' '[]' '02_Dev/note.md'
-        New-Memory $w.A.MemoryDir 'backed-promotion' 'body' 'active' "['docs/spec.md']" '02_Dev/other.md'
+        New-Memory $w.A.MemoryDir 'bare-promotion' 'body' 'active' '[]' '02_Dev/note.md'
+        New-Memory $w.A.MemoryDir 'evidenced-promotion' 'body' 'active' "['docs/spec.md']" '02_Dev/other.md'
 
         Invoke-Sync $w.A $w.Vault 'Initialize'
 
         $log = Get-SyncLog $w.A $w.Vault
         $log | Should -Match 'unevidenced=1'
         $section = Get-LogSection $log 'Claimed verified without evidence'
-        $section | Should -Match 'unbacked-promotion'
-        $section | Should -Not -Match 'backed-promotion'
+        $section | Should -Match 'bare-promotion'
+        $section | Should -Not -Match 'evidenced-promotion'
     }
 
     It 'keeps evidence-checking the legacy promoted status and lists it for migration' {
