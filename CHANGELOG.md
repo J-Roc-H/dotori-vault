@@ -7,6 +7,32 @@ history contains private material. What is preserved is the order and the reason
 
 First public extraction. Nothing has been released yet.
 
+### Your vault is called whatever you call it
+
+The repository's folders were renamed to `vault_ai/` and `vault_human/`, and the author —
+whose own folders are `VAULT_AI` and `VAULT_JROC` — read that as a rename he was now
+obliged to perform. Two documents already said the layout was optional. It was still the
+wrong impression to leave, and chasing it down turned up a real fault underneath.
+
+- **The backup was named after one person's vault.** `Initialize` wrote
+  `Vault_AI-backup-<timestamp>/Vault_AI/` regardless of what the vault was actually
+  called, so anyone else's data was copied into a stranger's directory name and a restore
+  would have put it back under the wrong one. It now takes the name from the vault it is
+  backing up. Nothing tested the backup path, which is how one person's setup stayed
+  disguised as a general one for this long; there is a test now.
+- The remaining `Vault_AI` mentions in log output and comments are gone. What is left is
+  the default `-VaultRoot`, which is a real person's path and documented as one.
+- `docs/spec.md` now leads with the rule instead of the diagram, and the diagram says
+  `<your ai vault>/` rather than a name. An implementation that behaves differently based
+  on the folder name is explicitly not conformant.
+- The folder-rename section in `docs/upgrading.md` was a numbered step in a numbered list
+  of upgrades, which is why `(optional)` in its title did not survive contact with a
+  reader. It is no longer numbered and now says there is nothing to do.
+- `VAULT_JROC` is a **better** name than `vault_human`, and the docs now say so: it says
+  whose vault it is, which is the one thing a personal vault should say and the one thing a
+  generic label cannot. The repository needs generic words because it explains both sides
+  to a stranger. Nobody is a stranger to their own vault.
+
 ### Lifecycle and promotion are two axes now, not one
 
 `promoted` was the last state after `durable`, which meant promotion *replaced* where a

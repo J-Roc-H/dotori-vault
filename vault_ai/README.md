@@ -29,6 +29,10 @@ Your vault lives on your own disk, in a folder your sync service carries between
 This directory is the starting content you copy into it — see the Install section of
 [../README.md](../README.md).
 
+**Nor is `vault_ai` a name your folder has to take.** It is named that here because a
+repository has to explain the two sides to a stranger. Yours can be called anything; the
+script is pointed at it with `-VaultRoot` and never looks at what it is called.
+
 The distinction matters more than it sounds. The shim at *your* vault root is the path
 every machine bakes into its session hook, and a machine whose hook points at nothing can
 never run the sync that would deliver the fix.

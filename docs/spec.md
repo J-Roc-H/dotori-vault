@@ -56,23 +56,29 @@ Folder names above are the contract. Anything else in the vault is ignored.
 
 ### Where the vault sits
 
+**The contract says nothing about what your folders are called.** An implementation is
+pointed at the vault directly, and must not require a sibling to exist, must not read one,
+and must not create one. What follows is a shape, not a set of names.
+
 The vault is normally one of two folders under a single synced workspace:
 
 ```
 <workspace>/                    the folder your sync service carries between machines
-+-- vault_ai/                   the vault this document specifies
-+-- vault_human/                what a person knows. Not specified here
++-- <your ai vault>/            the vault this document specifies
++-- <your human vault>/         what a person knows. Not specified here
 ```
 
-Two folders rather than one because they answer to different owners: agents write into
-`vault_ai/` constantly, a person writes into `vault_human/` deliberately, and a promotion
-from one to the other is supposed to feel like a decision. Sharing a root would make it
-feel like a move.
+Two folders rather than one because they answer to different owners: agents write into the
+first constantly, a person writes into the second deliberately, and a promotion from one to
+the other is supposed to feel like a decision. Sharing a root would make it feel like a
+move.
 
-**The workspace is a convention; only the vault is the contract.** An implementation is
-pointed at the vault directly and must not require a sibling to exist, must not read one,
-and must not create one. The names above are what this implementation's documentation
-uses so that two people describing their setup mean the same thing.
+**Call them whatever you already call them.** This repository names its own starting
+skeletons `vault_ai/` and `vault_human/` because a repository has to explain the two sides
+to a stranger, and needs generic words to do it. Your own vault is not a stranger's, and a
+name that means something to you is a better name — `VAULT_AI` and `VAULT_JROC` are as
+conformant as anything here. An implementation that behaves differently based on the folder
+name is not conformant.
 
 ---
 

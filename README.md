@@ -62,10 +62,10 @@ DOTORI keeps one source of truth and publishes it outward:
 
 ```
    <workspace>/                one folder your sync service carries between machines
+   |                           (call these two whatever you already call them)
+   +-- <your human vault>/     what you know. Nothing publishes out of here
    |
-   +-- vault_human/            what you know. Nothing publishes out of here
-   |
-   +-- vault_ai/               what your agents know
+   +-- <your ai vault>/        what your agents know
            |
         +--+------------------+---------------------+
         |                     |                     |
@@ -328,6 +328,10 @@ Which is why the repository is split the way it is:
 | `tool/` | Everything that executes. The shim, the implementation, the tests |
 | `vault_ai/` | Starting content for the agent vault. Right now that is the wrapup skill; `Initialize` creates the rest of the folders, because git does not track empty ones |
 | `vault_human/` | Starting skeleton and templates for the human vault |
+
+These last two are named generically because a repository has to explain both sides to a
+stranger. **They are not names your own folders have to take** — see
+[docs/spec.md](docs/spec.md#where-the-vault-sits).
 | `docs/` | The contract and the reasoning, including the sample workspace |
 
 **Three different roots, and confusing them costs you.** The repository root is what you

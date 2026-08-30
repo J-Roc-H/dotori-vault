@@ -19,11 +19,11 @@ BeforeAll {
     $global:ToolRoot    = Split-Path -Parent $PSScriptRoot
     $global:ProjectRoot = Split-Path -Parent $global:ToolRoot
 
-    function global:New-FreshMachine {
+    function global:New-FreshMachine([string]$vaultName = 'vault') {
         $root = Join-Path ([IO.Path]::GetTempPath()) ('dotori-install-' + [Guid]::NewGuid().ToString('N'))
         $m = [pscustomobject]@{
             Root       = $root
-            Vault      = (Join-Path $root 'vault')
+            Vault      = (Join-Path $root $vaultName)
             ClaudeHome = (Join-Path $root 'claude')
             ClaudeRoot = (Join-Path $root 'claude-root')
             CodexHome  = (Join-Path $root 'codex')
@@ -132,6 +132,24 @@ Describe 'The install procedure in README.md, performed literally' {
         # The skill a new installation is told to copy has to arrive where the agent reads
         # it, or the routine the docs point at does not exist on the machine.
         (Join-Path $m.ClaudeHome 'skills\wrapup\SKILL.md') | Should -Exist
+    }
+
+    It 'names the backup after your vault, not after the author''s' {
+        # This shipped as the literal string 'Vault_AI' - the author's own folder - so
+        # anyone else's data was copied into a stranger's directory name, and restoring it
+        # would have put the vault back under the wrong name. Nothing tested the backup
+        # path, which is how one person's setup stayed disguised as a general one.
+        $m = Register-Install (New-FreshMachine 'MyBrain')
+        # The backup is only taken when a manifest already exists, so the first run does
+        # not produce one. The second is the run under test.
+        Install-Documented $m 'Initialize'
+        Install-Documented $m 'Initialize'
+
+        $backups = @(Get-ChildItem -LiteralPath $m.Root -Directory -Filter 'MyBrain-backup-*')
+        $backups.Count | Should -BeGreaterThan 0
+        (Join-Path $backups[0].FullName 'MyBrain') | Should -Exist
+        # Names only - the default -VaultRoot still mentions Vault_AI inside the script.
+        @(Get-ChildItem -LiteralPath $m.Root -Recurse -Filter '*Vault_AI*').Count | Should -Be 0
     }
 
     It 'is idempotent: installing twice reports nothing to do' {

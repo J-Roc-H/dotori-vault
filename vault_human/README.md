@@ -6,6 +6,10 @@ what agents need in order to work.
 **Only the skeleton is published here** — the folder shape, the routing convention, and
 the note templates. The contents of a personal vault are personal.
 
+**And the name is not part of it.** `vault_human` is a generic label for a repository that
+has to explain both sides to a stranger. Your own vault should be called whatever means
+something to you — naming it after yourself is better than naming it after a category.
+
 ## What belongs on each side
 
 | Human vault | AI vault |

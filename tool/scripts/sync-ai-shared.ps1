@@ -560,9 +560,14 @@ if ($Mode -eq 'Report') {
 if ($Mode -eq 'Initialize') {
     Ensure-Dir $shared
     if (Test-Path -LiteralPath $manifestPath) {
-        $backup = Join-Path (Split-Path $shared -Parent) ('Vault_AI-backup-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+        # Name the backup after the vault it is a backup of. This used to be the literal
+        # string 'Vault_AI' - one person's folder name - so someone whose vault is called
+        # anything else got their data copied into a stranger's directory name, and a
+        # restore would have put it back under the wrong name.
+        $vaultName = Split-Path $shared -Leaf
+        $backup = Join-Path (Split-Path $shared -Parent) ($vaultName + '-backup-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
         Ensure-Dir $backup
-        Copy-Item -LiteralPath $shared -Destination (Join-Path $backup 'Vault_AI') -Recurse -Force
+        Copy-Item -LiteralPath $shared -Destination (Join-Path $backup $vaultName) -Recurse -Force
     }
     Ensure-Dir $agents; Ensure-Dir $skills; Ensure-Dir $memory
     Copy-Tree (Join-Path $ClaudeHome 'agents') $agents
@@ -1147,7 +1152,7 @@ if ($invalidSkillFolders.Count) { $log += ''; $log += '## Invalid skill folders'
 Write-Utf8 $logPath ($log -join "`r`n")
 
 # Install the same sync command on both SessionStart (pull latest at start) and Stop
-# (push this session's changes back out) so the gap between a local edit and Vault_AI
+# (push this session's changes back out) so the gap between a local edit and the vault
 # seeing it is one turn, not "until the next session happens to start".
 # Installing hooks is an Initialize job, not something every Sync redoes. These calls sat
 # outside the mode check, so the Stop hook - which fires after every turn, not once per
@@ -1170,7 +1175,7 @@ if ($hooksSkipped.Count) {
     }
 }
 Prune-Backups
-# Keep the installed copy in Vault_AI in step with this script when invoked from outputs.
+# Keep the copy installed in the vault in step with this script when invoked from outside.
 # When this script is already running from scripts\, source and destination are identical.
 $runningScript = [IO.Path]::GetFullPath($PSCommandPath)
 $installedScript = [IO.Path]::GetFullPath($installTarget)
@@ -1233,5 +1238,5 @@ if ($hasNews) {
         Write-Host ('New handoff (unread on this machine): ' + ($newHandoff -join ', ')) -ForegroundColor Yellow
     }
 } else {
-    Write-Host 'Vault_AI sync: no changes'
+    Write-Host 'Vault sync: no changes'
 }
