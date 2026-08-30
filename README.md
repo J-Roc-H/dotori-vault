@@ -345,8 +345,10 @@ Stated up front, because finding these yourself is worse than being told.
 **A folder that is not synced anywhere still installs cleanly.** Nothing here can ask
 Windows whether a folder replicates — sync clients are ordinary programs watching ordinary
 directories. So the vault location is checked against the shapes of the services it knows
-(`iCloudDrive`, `OneDrive`, `Dropbox`, `Google Drive`, a Syncthing marker, and others), and
-`Initialize` says so when none of them match. It is a guess and it says it is a guess. If it
+— Google Drive, OneDrive, iCloud Drive, Dropbox, Syncthing, Nextcloud, ownCloud, pCloud,
+MEGA, Resilio Sync, Sync.com and Yandex Disk — and `Initialize` **names them** when none
+match, rather than saying "a sync service" and leaving you to work out which of your folders
+it means. It is a guess and it says it is a guess. If it
 is right and you ignore it, everything on that machine still works and **nothing reaches a
 second computer**, because there is no second copy of the folder anywhere. `Vault location:`
 in the log is the standing answer.

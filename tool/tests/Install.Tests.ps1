@@ -63,11 +63,16 @@ BeforeAll {
         if ($extra) { $splat['ExtraWorkspace'] = @($extra) }
 
         $global:LastInstallWarnings = @()
-        # 3>&1 turns warnings into pipeline objects so they can be inspected; 6>$null
-        # drops the Write-Host block, which is not what these tests are about.
-        & (Join-Path $m.Vault 'sync-ai-shared.ps1') @splat 6>$null 3>&1 | ForEach-Object {
+        $global:LastInstallOutput = @()
+        # 3>&1 turns warnings into pipeline objects and 6>&1 does the same for Write-Host.
+        # Both are captured because two of the tests below are about what the run SAYS -
+        # the closing summary as much as the warning - and a helper that discards either
+        # stream cannot express that.
+        & (Join-Path $m.Vault 'sync-ai-shared.ps1') @splat 3>&1 6>&1 | ForEach-Object {
             if ($_ -is [System.Management.Automation.WarningRecord]) {
                 $global:LastInstallWarnings += $_.Message
+            } elseif ($_ -is [System.Management.Automation.InformationRecord]) {
+                $global:LastInstallOutput += $(if ($_.MessageData) { [string]$_.MessageData } else { [string]$_ })
             }
         }
     }
@@ -223,6 +228,36 @@ Describe 'The install procedure in README.md, performed literally' {
         # contains 'OneDrive', so a looser pattern would pass even if the hint failed.
         [IO.File]::ReadAllText((Join-Path $m.Vault 'sync\sync-log-FRESH-1.md')) |
             Should -Match '\(OneDrive\)'
+    }
+
+    It 'names actual services instead of saying "a sync service"' {
+        # "a sync service" is an abstraction. To a reader whose first language is not
+        # English it may not even read as being about the drive they already have, and
+        # the script knows twelve of them by name while saying none of them out loud.
+        $m = Register-Install (New-FreshMachine)
+        Install-Documented $m 'Initialize'
+
+        $w = $global:LastInstallWarnings -join ' '
+        $w | Should -Match 'Google Drive'
+        $w | Should -Match 'OneDrive'
+    }
+
+    It 'repeats the problem in the summary instead of pointing above it' {
+        # Initialize prints about forty lines; a default console window holds thirty. The
+        # summary used to end with "see the warning above", which by then can refer to
+        # something no longer on screen - and it is the one line in the run that most
+        # needs reading.
+        $m = Register-Install (New-FreshMachine)
+        Install-Documented $m 'Initialize'
+
+        $out = $global:LastInstallOutput -join "`n"
+        # Cut at the next heading. Everything-after-a-heading is not a section, which is
+        # the trap the conformance tests already had to be rescued from.
+        $summary = (($out -split 'Between machines')[1] -split 'What it does not do')[0]
+        $summary | Should -Match ([regex]::Escape($m.Vault))
+        $summary | Should -Match 'Google Drive'
+        $summary | Should -Match '\-VaultRoot'
+        $out | Should -Not -Match 'see the warning above'
     }
 
     It 'is idempotent: installing twice reports nothing to do' {

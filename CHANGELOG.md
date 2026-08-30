@@ -30,6 +30,17 @@ have shipped.
   for every implementation: a sibling is never read and never written. It is now
   `-ExtraWorkspace`, which does nothing unless you name somewhere. A folder the operator
   names is not a sibling the tool went looking for.
+- **The messages said "a sync service" while the script knew twelve of them by name.** They
+  are named out loud now — Google Drive, OneDrive, iCloud Drive, Dropbox, Syncthing and
+  others — from the same list the check itself uses, so the prose cannot drift into
+  advertising a service the check does not look for. An abstraction is a poor instruction
+  to anyone, and to a reader whose first language is not English "a sync service" may not
+  even read as being about the drive they already have.
+- **The closing summary pointed at a warning that may have scrolled away.** `Initialize`
+  prints about forty lines and a default console window holds thirty, so "see the warning
+  above" could refer to something no longer on screen — the one line in the run that most
+  needs reading. The summary now restates the vault path, the services it did not match,
+  and the exact `-VaultRoot` to pass instead.
 - **The first file a new vault contained told the reader to consult two things that do not
   exist.** The seeded `shared-rules.md` opened with "Read the current Vault_Personal
   guidance and project devref before editing" — both of them the author's. It is generic

@@ -70,6 +70,14 @@ one names that differently.
 | OneDrive | `name-MACHINE.ext` |
 | Syncthing | `name.ext.sync-conflict-20260101-120000-ABCDEFG` |
 
+**A separate list decides whether your vault looks synced at all.** `Initialize` compares the
+vault path against Google Drive, OneDrive, iCloud Drive, Dropbox, Syncthing, Nextcloud,
+ownCloud, pCloud, MEGA, Resilio Sync, Sync.com and Yandex Disk — by folder-name shape, and by
+the markers Syncthing and Dropbox leave in the folder they replicate — and warns when none
+match. It is a guess: there is no way to ask Windows whether a folder replicates. If yours is
+not on that list it still works, you just get a warning to ignore. `Vault location:` in every
+log records which way it read.
+
 **This table is reported, not verified.** These conventions were collected from
 documentation and from what turned up in practice; only one service has actually been run
 against long-term. Rather than pretend otherwise, the sync looks for the *shapes* above

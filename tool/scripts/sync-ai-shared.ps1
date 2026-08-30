@@ -196,6 +196,35 @@ function Find-ConflictCopies([string]$root) {
     return @($found)
 }
 function Ensure-Dir([string]$p) { New-Item -ItemType Directory -Path $p -Force | Out-Null }
+# One list, used both to recognise a path and to name examples in the messages. Keeping a
+# separate hardcoded list for the prose would let the two drift, and then a message would
+# advertise a service the check does not actually look for.
+#
+# Order matters: the first few names are what gets offered as examples, so the services
+# most people already have come first.
+$script:SyncServiceCatalog = @(
+    @{ Name = 'Google Drive'; Match = @('Google Drive', 'GoogleDrive', 'My Drive') },
+    @{ Name = 'OneDrive';     Match = @('OneDrive') },
+    @{ Name = 'iCloud Drive'; Match = @('iCloudDrive', 'iCloud~') },
+    @{ Name = 'Dropbox';      Match = @('Dropbox'); Marker = @('.dropbox', '.dropbox.cache') },
+    @{ Name = 'Syncthing';    Marker = @('.stfolder') },
+    @{ Name = 'Nextcloud';    Match = @('Nextcloud') },
+    @{ Name = 'ownCloud';     Match = @('ownCloud') },
+    @{ Name = 'pCloud';       Match = @('pCloud') },
+    @{ Name = 'MEGA';         Match = @('MEGA') },
+    @{ Name = 'Resilio Sync'; Match = @('Resilio Sync') },
+    @{ Name = 'Sync.com';     Match = @('Sync.com') },
+    @{ Name = 'Yandex Disk';  Match = @('Yandex.Disk') }
+)
+
+# Names for the messages, taken from the same list the check uses. "a sync service" is an
+# abstraction, and to a reader whose first language is not English it may not even read as
+# being about the drive they already have. Naming four of them is not decoration.
+function Get-SyncServiceExamples([int]$count = 5) {
+    $names = @($script:SyncServiceCatalog | ForEach-Object { $_.Name } | Select-Object -First $count)
+    return (($names -join ', ') + ' and others')
+}
+
 # Guess whether a path is inside something that replicates between machines. Returns the
 # service name, or $null when nothing is recognised.
 #
@@ -206,34 +235,20 @@ function Ensure-Dir([string]$p) { New-Item -ItemType Directory -Path $p -Force |
 # reporting success, and silently syncing nothing.
 function Get-SyncServiceHint([string]$p) {
     if (-not $p) { return $null }
-    $known = @(
-        @{ Match = 'iCloudDrive';   Name = 'iCloud Drive' },
-        @{ Match = 'iCloud~';       Name = 'iCloud Drive' },
-        @{ Match = 'OneDrive';      Name = 'OneDrive' },
-        @{ Match = 'Dropbox';       Name = 'Dropbox' },
-        @{ Match = 'Google Drive';  Name = 'Google Drive' },
-        @{ Match = 'GoogleDrive';   Name = 'Google Drive' },
-        @{ Match = 'My Drive';      Name = 'Google Drive' },
-        @{ Match = 'Nextcloud';     Name = 'Nextcloud' },
-        @{ Match = 'ownCloud';      Name = 'ownCloud' },
-        @{ Match = 'pCloud';        Name = 'pCloud' },
-        @{ Match = 'Resilio Sync';  Name = 'Resilio Sync' },
-        @{ Match = 'Sync.com';      Name = 'Sync.com' },
-        @{ Match = 'MEGA';          Name = 'MEGA' },
-        @{ Match = 'Yandex.Disk';   Name = 'Yandex Disk' }
-    )
-    foreach ($k in $known) {
-        if ($p -like ('*' + $k.Match + '*')) { return $k.Name }
+    # Path shapes first: no disk access, and it is how most clients arrange themselves.
+    foreach ($svc in $script:SyncServiceCatalog) {
+        foreach ($m in @($svc.Match)) {
+            if ($m -and ($p -like ('*' + $m + '*'))) { return $svc.Name }
+        }
     }
-    # Syncthing and Dropbox leave a marker in the folder they replicate, or in one of its
-    # ancestors. Walk up rather than checking only the vault itself: the marker sits at
-    # the root of the shared folder, and the vault is usually below it.
+    # Then markers. These sit at the root of the replicated folder and the vault is
+    # usually below it, so walk up rather than checking only the vault itself.
     $dir = $p
     while ($dir) {
-        foreach ($marker in @(@{ File = '.stfolder'; Name = 'Syncthing' },
-                              @{ File = '.dropbox';  Name = 'Dropbox' },
-                              @{ File = '.dropbox.cache'; Name = 'Dropbox' })) {
-            if (Test-Path -LiteralPath (Join-Path $dir $marker.File)) { return $marker.Name }
+        foreach ($svc in $script:SyncServiceCatalog) {
+            foreach ($f in @($svc.Marker)) {
+                if ($f -and (Test-Path -LiteralPath (Join-Path $dir $f))) { return $svc.Name }
+            }
         }
         $parent = Split-Path -Path $dir -Parent
         if ($parent -eq $dir) { break }
@@ -470,10 +485,11 @@ if (-not (Test-Path -LiteralPath $VaultRoot)) {
             throw ("Cannot create the vault at $VaultRoot - its parent folder " +
                 "$vaultParent does not exist. This usually means the default path assumes " +
                 "a cloud client you do not have installed. Pass -VaultRoot pointing at a " +
-                "folder inside whichever synced folder you actually use, for example: " +
-                "-VaultRoot `"`$env:USERPROFILE\Dropbox\dotori-vault`". Any folder works; " +
-                "it does not have to be any particular service, and nothing here requires " +
-                "a note-taking app.")
+                "folder inside whichever synced folder you actually use - " +
+                (Get-SyncServiceExamples) + " - for example: " +
+                "-VaultRoot `"`$env:USERPROFILE\Google Drive\dotori-vault`". Any folder " +
+                "works; it does not have to be any particular service, and nothing here " +
+                "requires a note-taking app.")
         }
         Ensure-Dir $VaultRoot
     }
@@ -567,7 +583,7 @@ if ($Mode -eq 'Report') {
 
     Write-Host 'Locations' -ForegroundColor Cyan
     Show-Target 'vault' $VaultRoot (Test-Path -LiteralPath $VaultRoot)
-    Write-Host ("                         {0}" -f $(if ($syncService) { "looks like $syncService - a second machine can share it" } else { 'no sync service recognised - see What it does NOT do' }))
+    Write-Host ("                         {0}" -f $(if ($syncService) { "looks like $syncService - a second machine can share it" } else { 'not ' + (Get-SyncServiceExamples) + ' - nothing would reach a second machine' }))
     Show-Target 'local working area' $MirrorRoot (Test-Path -LiteralPath $MirrorRoot)
     Write-Host ("  {0,-22} {1}" -f 'git directory:', (Join-Path $MirrorRoot 'vault-ai.git'))
     Write-Host ("  {0,-22} {1}" -f 'settings backups:', $backupRoot)
@@ -623,13 +639,13 @@ if ($Mode -eq 'Initialize' -and -not $syncService) {
     # supports - the README calls it the entry price. But a person installing this to
     # reach a second computer has to hear it once, at the moment it is still cheap to
     # change, not the next morning at the office.
-    Write-Warning ("This vault is at $VaultRoot, and nothing here recognises that as a " +
-        "folder a sync service carries between machines. That is a guess and it may be " +
-        "wrong - your service may simply not be one this knows. But if it is right: " +
-        "everything on THIS machine still works, and nothing reaches a second computer, " +
-        "because there is no second copy of this folder anywhere. To change that, run " +
-        "Initialize again with -VaultRoot pointing inside whichever synced folder you " +
-        "actually use. Nothing is lost by moving it later.")
+    Write-Warning ("This vault is at $VaultRoot, and it does not look like a folder any " +
+        "of these carry between machines: " + (Get-SyncServiceExamples) + ". That is a " +
+        "guess and it may be wrong - yours may simply not be one this knows. But if it " +
+        "is right: everything on THIS machine still works, and nothing reaches a second " +
+        "computer, because there is no second copy of this folder anywhere. To change " +
+        "that, run Initialize again with -VaultRoot pointing inside whichever synced " +
+        "folder you actually use. Nothing is lost by moving it later.")
 }
 
 if ($Mode -eq 'Initialize') {
@@ -1357,8 +1373,18 @@ if ($Mode -eq 'Initialize') {
         Write-Host ("  Between machines  Your vault is in {0}. A second computer pointed at" -f $syncService)
         Write-Host '                    the same folder gets all of it - run Initialize there too.'
     } else {
-        Write-Host '  Between machines  Nothing yet. This folder does not look like one that is'
-        Write-Host '                    carried between machines - see the warning above.'
+        # Say it again here rather than pointing upward. Initialize prints about forty
+        # lines and a default console window holds thirty, so "see the warning above"
+        # can refer to something no longer on screen - which is the one message in this
+        # whole run that a person most needs to read.
+        Write-Host ("  Between machines  Nothing yet. {0}" -f $VaultRoot)
+        Write-Host ("                    does not look like a folder any of these carry between")
+        Write-Host ("                    machines: {0}." -f (Get-SyncServiceExamples))
+        Write-Host '                    So there is no second copy of it anywhere.'
+        Write-Host '                    When you want one, run Initialize again with the vault'
+        Write-Host '                    inside your own synced folder, for example:'
+        Write-Host '                      -VaultRoot "$env:USERPROFILE\Google Drive\dotori-vault"'
+        Write-Host '                    Nothing is lost by moving it later.'
     }
     Write-Host ''
     Write-Host 'What it does not do' -ForegroundColor Cyan
