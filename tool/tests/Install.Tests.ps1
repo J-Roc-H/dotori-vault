@@ -41,7 +41,10 @@ BeforeAll {
         return $m
     }
 
-    function global:Install-Documented($m, [string]$mode) {
+    # $extra is passed through as -ExtraWorkspace. Warnings are captured rather than
+    # discarded: two of the tests below are about what the run says, not what it writes,
+    # and a helper that swallows the warning stream cannot express that.
+    function global:Install-Documented($m, [string]$mode, [string]$extra = '') {
         # README step 2: the shim goes to the vault root, the implementation to scripts\,
         # and skills\wrapup\ alongside them.
         Copy-Item (Join-Path $global:ToolRoot 'sync-ai-shared.ps1') $m.Vault -Force
@@ -52,10 +55,21 @@ BeforeAll {
 
         # README step 3: run it through the shim, which is the path the instructions give
         # and the path every session hook will be baked with.
-        & (Join-Path $m.Vault 'sync-ai-shared.ps1') -Mode $mode -VaultRoot $m.Vault `
-            -ClaudeRoot $m.ClaudeRoot -ClaudeHome $m.ClaudeHome -CodexHome $m.CodexHome `
-            -AntigravityHome $m.Antigrav -MirrorRoot $m.Mirror -MachineKey 'FRESH-1' `
-            -WarningAction SilentlyContinue 3>$null 6>$null | Out-Null
+        $splat = @{
+            Mode = $mode; VaultRoot = $m.Vault; ClaudeRoot = $m.ClaudeRoot
+            ClaudeHome = $m.ClaudeHome; CodexHome = $m.CodexHome
+            AntigravityHome = $m.Antigrav; MirrorRoot = $m.Mirror; MachineKey = 'FRESH-1'
+        }
+        if ($extra) { $splat['ExtraWorkspace'] = @($extra) }
+
+        $global:LastInstallWarnings = @()
+        # 3>&1 turns warnings into pipeline objects so they can be inspected; 6>$null
+        # drops the Write-Host block, which is not what these tests are about.
+        & (Join-Path $m.Vault 'sync-ai-shared.ps1') @splat 6>$null 3>&1 | ForEach-Object {
+            if ($_ -is [System.Management.Automation.WarningRecord]) {
+                $global:LastInstallWarnings += $_.Message
+            }
+        }
     }
 
     $global:InstallRoots = @()
@@ -150,6 +164,65 @@ Describe 'The install procedure in README.md, performed literally' {
         (Join-Path $backups[0].FullName 'MyBrain') | Should -Exist
         # Names only - the default -VaultRoot still mentions Vault_AI inside the script.
         @(Get-ChildItem -LiteralPath $m.Root -Recurse -Filter '*Vault_AI*').Count | Should -Be 0
+    }
+
+    It 'writes nothing outside the vault and the runtimes it was told about' {
+        # docs/spec.md section 2: a sibling of the vault is never read and never written.
+        # This shipped as a hardcoded '<vault parent>\Vault_Personal' in a variable named
+        # after the author - undocumented, dead code for everyone else, and against the
+        # rule the same repository states. Nothing tested it, so nothing caught it.
+        $m = Register-Install (New-FreshMachine)
+        $sibling = Join-Path $m.Root 'Vault_Personal'
+        New-Item -ItemType Directory -Path $sibling -Force | Out-Null
+
+        Install-Documented $m 'Initialize'
+
+        @(Get-ChildItem -LiteralPath $sibling -Recurse -Force).Count | Should -Be 0
+    }
+
+    It 'publishes into an extra workspace only when told to' {
+        $m = Register-Install (New-FreshMachine)
+        $ws = Join-Path $m.Root 'another-workspace'
+        New-Item -ItemType Directory -Path $ws -Force | Out-Null
+
+        Install-Documented $m 'Initialize' $ws
+
+        (Join-Path $ws '.agents\skills\wrapup\SKILL.md') | Should -Exist
+    }
+
+    It 'skips a missing extra workspace instead of failing the run' {
+        # Same rule as a missing runtime: this runs at session start and must never take
+        # the session down because a folder moved.
+        $m = Register-Install (New-FreshMachine)
+        $gone = Join-Path $m.Root 'not-there'
+
+        { Install-Documented $m 'Initialize' $gone } | Should -Not -Throw
+        (Join-Path $m.Vault 'skills\wrapup\SKILL.md') | Should -Exist
+    }
+
+    It 'says so when the vault does not look like a folder that travels' {
+        # The scenario this exists for: someone installs into a plain local folder, sees
+        # a successful run, and finds out the next morning at the office that nothing
+        # crossed over. The script's own comment calls that the worst state it can be in.
+        $m = Register-Install (New-FreshMachine)
+        Install-Documented $m 'Initialize'
+
+        ($global:LastInstallWarnings -join ' ') | Should -Match 'nothing here recognises'
+        [IO.File]::ReadAllText((Join-Path $m.Vault 'sync\sync-log-FRESH-1.md')) |
+            Should -Match 'no sync service recognised'
+    }
+
+    It 'stays quiet when the vault is inside a recognised sync folder' {
+        # The negative half. A check that fires on a correct setup is one people learn to
+        # ignore, and then it is worth nothing on the setup that is actually broken.
+        $m = Register-Install (New-FreshMachine 'OneDrive\dotori')
+        Install-Documented $m 'Initialize'
+
+        ($global:LastInstallWarnings -join ' ') | Should -Not -Match 'nothing here recognises'
+        # Match the parenthesised verdict, not the bare word: the vault path itself
+        # contains 'OneDrive', so a looser pattern would pass even if the hint failed.
+        [IO.File]::ReadAllText((Join-Path $m.Vault 'sync\sync-log-FRESH-1.md')) |
+            Should -Match '\(OneDrive\)'
     }
 
     It 'is idempotent: installing twice reports nothing to do' {

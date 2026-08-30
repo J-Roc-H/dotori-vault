@@ -7,6 +7,41 @@ history contains private material. What is preserved is the order and the reason
 
 First public extraction. Nothing has been released yet.
 
+### The first run now says what it did and what it did not
+
+Walking a new user through the whole story — two runtimes on one machine, then a second
+machine the next morning — found three places it breaks, and one thing that should never
+have shipped.
+
+- **A vault that is not synced anywhere installed cleanly and said nothing.** The comment
+  at that very spot in the script calls this "the worst state it can be in", and the guard
+  covered exactly one route to it: a parent folder that does not exist. Point it at a
+  perfectly ordinary local folder and the run succeeded, silently, forever. `Initialize`
+  now checks the vault path against the shapes of the sync services it knows and warns
+  when none match, and the log carries `Vault location:` every run. It is a guess — there
+  is no way to ask Windows whether a folder replicates — and the message says so.
+- **The run ended in a counter dump.** `Skills synchronized: 14`, `Conflicts: 0`, and
+  nothing that answers "so what do I have now". `Initialize` now closes with what works on
+  this machine, whether anything reaches a second one, and what does not travel at all.
+  Only `Initialize`: in `Sync` it would fire after every turn and become wallpaper.
+- **`Vault_Personal` was hardcoded**, in a variable named after the author, publishing
+  skills into a sibling of the vault if that folder happened to exist. It was undocumented,
+  it was dead code for everyone else, and it broke the rule `docs/spec.md` section 2 sets
+  for every implementation: a sibling is never read and never written. It is now
+  `-ExtraWorkspace`, which does nothing unless you name somewhere. A folder the operator
+  names is not a sibling the tool went looking for.
+- **The first file a new vault contained told the reader to consult two things that do not
+  exist.** The seeded `shared-rules.md` opened with "Read the current Vault_Personal
+  guidance and project devref before editing" — both of them the author's. It is generic
+  now. This is the very first content DOTORI hands someone, which is the worst possible
+  place to put a private reference.
+- `Initialize` does not create a human vault, and now says so. The author believed it did,
+  which is a fair reading of a README that draws both vaults side by side.
+
+The test that matters most here is the one asserting nothing is written outside the vault
+when `-ExtraWorkspace` is not passed. The hardcoded path survived this long because no test
+ever looked outside.
+
 ### Your vault is called whatever you call it
 
 The repository's folders were renamed to `vault_ai/` and `vault_human/`, and the author —

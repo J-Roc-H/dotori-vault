@@ -305,6 +305,7 @@ Runtimes: agent-a agents=5 skills=14 | agent-b agents=5 skills=14 | agent-c agen
 Skills synced: 14 skill(s) / 14 file(s)
 Memory: pushed 3 / pulled 0 / normalized 0 / conflicts 0
 Conflicts: 0
+Vault location: C:\Users\a\OneDrive\dotori (OneDrive)
 Lifecycle: active=80 verified=6 / no-status=0
 Promoted: 3 memory(ies) with a human-vault destination
 Legacy promoted status: 0 memory(ies) to migrate
