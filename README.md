@@ -1,15 +1,6 @@
 # DOTORI
 
-**DOcuments TO Real Intelligence**
-
-*일터에서 하던 작업을 집에서 그대로 이어서. 규칙·스킬·기억이 기기와 AI를 따라옵니다.*
-
-> **Windows-first, on purpose.** PowerShell 5.1, nothing to install, no runtime to manage.
-> Most tooling in this space assumes a Unix machine and leaves Windows users to adapt it;
-> this one is the other way round.
->
-> Not on Windows? [docs/spec.md](docs/spec.md) is the on-disk contract — this script is one
-> implementation of it, and a second one on another platform can share the same vault.
+*일터에서 갖춘 AI 작업 환경을 집에서 그대로. 규칙·스킬·기억이 기기와 AI를 따라옵니다.*
 
 You tune an AI coding agent at work until it actually knows how you work. Then you get
 home, open the same agent on your own machine, and it knows none of it.
@@ -19,6 +10,41 @@ the same agent definitions, the same memory — from one shared folder of plain 
 It does the same across agents, so what you taught one is not lost when you use another.
 
 No database. No service. No daemon. No `.git` directory inside your cloud-synced vault.
+
+*(DOcuments TO Real Intelligence, if you were wondering.)*
+
+## Read this before you read anything else
+
+**If you can put a git remote between your machines, use something else.**
+[skillshare](https://github.com/runkids/skillshare) covers sixty-odd agent tools where this
+covers three, runs on macOS and Linux as well as Windows, syncs bidirectionally, and is
+maintained by people who are not one person with a day job. If your two machines can both
+reach the same repository, that is a better tool than this one and you should go and get it.
+
+DOTORI exists for the case where they cannot. On a work machine, pushing your setup to a
+personal remote may be against policy, technically blocked, or simply something you do not
+want to do. A folder your employer already syncs crosses that boundary where a remote will
+not, and everything here follows from that one constraint.
+
+Two other things are unusual enough to name, since they are the reason to look at this at
+all rather than merely a smaller version of the alternatives:
+
+- **Memory has a lifecycle with a gate on it.** Not "files copied both ways" —
+  a status field where `verified` requires *named* evidence (a path, a commit, test output),
+  where inference is explicitly not evidence, and where only a person may mark something
+  promoted. Every run counts what claims a status it has not earned. See
+  [docs/memory.md](docs/memory.md).
+- **The layout is a contract, not an implementation detail.** [docs/spec.md](docs/spec.md)
+  defines it precisely enough to write a second implementation that shares a vault with this
+  one, with nine invariants and a conformance check that
+  [runs on every commit](tests/Conformance.Tests.ps1) rather than sitting in prose.
+
+**If you only read one document, read [docs/evolution.md](docs/evolution.md).** Every
+structure here replaced one that failed in a specific way, and the failures are the useful
+part — most of them are not specific to this tool or this platform.
+
+> **Windows and PowerShell 5.1.** That is what its author runs, not a claim that it is
+> better there. The spec is the portable part; the script is one implementation of it.
 
 ## The problem it solves
 
@@ -44,19 +70,27 @@ DOTORI keeps one source of truth and publishes it outward:
 ```
 
 **Neither dimension has a fixed size.** Two is the case it was built for, but nothing in
-the code counts machines — keys come from the account running the sync, so a third takes
-zero code changes. And it is useful on a single machine too, if what you want is several
-agents sharing one set of skills and definitions. A runtime that is not installed is
-skipped with a warning, never an error.
+the code counts machines — keys come from the computer name, so a third takes
+zero code changes. If two of your machines share a computer name, pass `-MachineKey`; the
+run stops with an error rather than letting them overwrite each other. A runtime that is
+not installed is skipped with a warning, never an error.
+
+### You do not need two computers for this to be worth anything
+
+Most of the value shows up on one machine: two agent runtimes reading the same skills and
+the same agent definitions, so what you teach one is not lost when you open the other. That
+needs no cloud folder and no second computer, and it is the part you can try in ten minutes
+— see [docs/quickstart.md](docs/quickstart.md).
+
+The second machine adds memory that travels. It is the case this was built for, but it is
+not the entry price.
 
 ### Why a cloud folder and not a git remote
 
-Because one of these machines is usually a work machine. Pushing it to your personal
-remote may be against policy, technically blocked, or simply something you do not want.
-A synced folder crosses that boundary where a remote will not.
-
-The git history is still there — it just lives outside the vault, on each machine, and
-pushing anywhere is a separate decision you make deliberately.
+Covered above, and it is the whole reason this exists rather than being one more skills
+syncer. Worth adding: **the git history is still there.** It lives outside the vault, on
+each machine, and pushing it anywhere is a separate decision you make deliberately —
+not a precondition for the tool to work.
 
 ## What it does
 
@@ -107,15 +141,33 @@ Nothing is added inside the vault.
 
 ## Install
 
-1. Copy `sync-ai-shared.ps1` (the shim) and `scripts\sync-ai-shared.ps1` into your vault
-   root and `scripts\` respectively.
-2. Run once to seed the folders and install the session hooks:
+**Already have DOTORI running?** [docs/upgrading.md](docs/upgrading.md) is the
+upgrade — the steps below are for a first install.
+
+1. **Look first.** `-Mode Report` writes nothing at all — it resolves every path, says
+   which runtimes it found, and names the settings files it would edit and the exact hook
+   line it would add:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "<repo>\sync-ai-shared.ps1" `
+  -Mode Report -VaultRoot "D:\my-vault"
+```
+
+   Everything it prints comes from the same variables the real run uses, so it cannot
+   describe one thing and do another. A test lists the whole tree before and after to
+   confirm it leaves nothing behind.
+
+2. Copy `sync-ai-shared.ps1` (the shim) and `scripts\sync-ai-shared.ps1` into your vault
+   root and `scripts\` respectively. Copy `skills\wrapup\` in too — it is the routine that
+   ends a session with something written down, and without it the counters below have
+   nothing to count.
+3. Run once to seed the folders and install the session hooks:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File "<vault>\sync-ai-shared.ps1" -Mode Initialize
 ```
 
-3. After that it runs itself at the start of every session.
+4. After that it runs itself at the start of every session.
 
 **Install your agent runtimes first.** The hook that makes step 3 true is written into
 each runtime's own settings file, and this will not create a settings file that a runtime
@@ -123,9 +175,12 @@ has not written yet — fabricating one is a good way to overwrite defaults it h
 chosen. If a runtime is missing, the run says so and skips it; install the runtime, then
 run this again.
 
-**Read this before step 2.** `-Mode Initialize` writes session hooks into your agent
+**Read this before step 3.** `-Mode Initialize` writes session hooks into your agent
 runtimes' settings files. It is not a dry run. If you want to see what it would touch
 first, read the `Add-HookCommand` calls at the bottom of `scripts\sync-ai-shared.ps1`.
+
+Only `Initialize` writes them. `Sync` — the mode the hook itself runs — reads those files
+and leaves them alone. If a hook is ever removed, run `Initialize` again to put it back.
 
 **The default paths are one person's setup**, including the vault location. Every one of
 them is a parameter — pass `-VaultRoot`, `-ClaudeHome`, `-CodexHome`, `-MirrorRoot` rather
@@ -172,6 +227,9 @@ nothing to decide.
 
 | Document | What it covers |
 |---|---|
+| [skills/wrapup/](skills/wrapup/SKILL.md) | The finishing routine: what to write down before you stop |
+| [docs/upgrading.md](docs/upgrading.md) | Already running it? The whole upgrade, and what the new counts will tell you |
+| [docs/quickstart.md](docs/quickstart.md) | Ten minutes on a scratch path: see it work without touching your setup |
 | [docs/spec.md](docs/spec.md) | The on-disk contract, for writing another implementation |
 | [docs/multi-machine.md](docs/multi-machine.md) | How machines and runtimes scale, and why neither is a fixed list |
 | [docs/routing.md](docs/routing.md) | Giving an agent the context for the task instead of everything |
@@ -184,6 +242,8 @@ nothing to decide.
 | [docs/evolution.md](docs/evolution.md) | How this architecture arrived at its current shape |
 | [human-vault/](human-vault/README.md) | The human side: folder skeleton and templates |
 | [examples/sample-workspace/](examples/sample-workspace/README.md) | A miniature of both vaults, with invented content |
+| [brain-git.ps1](brain-git.ps1) | Reading and rolling back the vault's git history by hand |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | What this project takes, what it does not, and how fast to expect a reply |
 | [CHANGELOG.md](CHANGELOG.md) | What changed and why |
 
 If you only read one, read [docs/evolution.md](docs/evolution.md). The code is specific to
@@ -198,10 +258,11 @@ cloud-synced folder, and optionally into a git remote. Both are exfiltration pat
 as an employer is concerned, however innocuous the content feels. Whether that is
 acceptable is a policy question, not a technical one, and it is yours to answer first.
 
-**The publish gate does not protect you here.** The allowlist and its fail-closed scrub
-exist for producing a *public* repository. They do not inspect what your vault holds, what
-the cloud folder receives, or what a private remote stores. Those carry whatever you put
-in the vault.
+**Nothing here inspects what you move.** There is no filter between your machine and the
+vault: whatever you put in the vault is what the cloud folder receives and what a private
+remote stores. Earlier revisions of this document referred to a publish gate that screened
+an extraction step; there is no extraction step any more (see *Where the code lives*), and
+no such gate ships here. Do not read this tool as having a safety net it does not have.
 
 **Practical separation that has held up:**
 
@@ -209,14 +270,80 @@ in the vault.
 |---|---|
 | Keep employer-specific values in configuration files that never sync | Hardcoding paths, naming rules, or team policy into shared skills and agents |
 | Write the shared skill generically, keep the specifics local | One skill that only makes sense inside one organization |
-| Add employer identifiers to the forbidden-pattern list, so the gate fails loudly if one ever reaches the public build | Trusting yourself to notice |
+| Add a check that fails loudly if an employer identifier ever reaches a shared file | Trusting yourself to notice |
 
-The last one is worth doing even if you never publish. A pattern that fails the build is a
-check that runs every time; an intention to be careful is not.
+The last one is the general rule this project keeps relearning: a check that runs every
+time beats an intention to be careful. If you publish anything derived from your vault,
+write the check before you need it.
+
+## Uninstalling
+
+Nothing here is hard to reverse, but the steps are worth writing down rather than leaving
+you to work them out from the source.
+
+1. **Remove the hooks.** In each runtime's settings file — `%USERPROFILE%\.claude\settings.json`,
+   and `%USERPROFILE%\.codex\hooks.json` if you use Codex — delete the `SessionStart` and
+   `Stop` entries whose command mentions `sync-ai-shared.ps1`. The installer backed each
+   file up before its first edit, under `%USERPROFILE%\.ai-shared-sync\backups\<timestamp>\`,
+   so you can also restore one of those.
+
+2. **Delete the local working area** if you want the git history gone:
+   `%USERPROFILE%\.ai-shared-sync\`. This holds the mirror repository, the settings
+   backups, and this machine's identity file. Deleting it loses the vault's version
+   history on this machine and nothing else.
+
+3. **Keep or delete the vault**, as you prefer. It is your content in plain Markdown, and
+   nothing outside it is needed to read it. The published copies inside each runtime's own
+   folders — `agents\`, `skills\` — stay where they are and keep working; they simply stop
+   being updated.
+
+That is all of it. There is no service to cancel, no registry key, and nothing running in
+the background between sessions.
+
+## Where the code lives
+
+**This repository is the code.** It is not an extract of a private one that gets scrubbed
+and copied out periodically — it was, briefly, and that arrangement had a defect worth
+naming: the author ran a private copy daily while publishing a different one, so the
+published code was the version nobody actually used. Every fault found in the first review
+after publication was of exactly that kind — real on a fresh machine, invisible on the one
+it grew up on.
+
+So the script here is the script the author runs. A vault holds content — skills, agents,
+memory — and that stays private; the code does not live there. If you find a bug, you are
+finding it in the same file its author runs.
 
 ## Known limitations
 
 Stated up front, because finding these yourself is worse than being told.
+
+**The session itself does not travel.** This is the one people expect and do not get.
+
+| Crosses over | Does not |
+|---|---|
+| Rules, skills, agent definitions | The conversation |
+| Memory that was **written** during the session | Whatever you were part-way through |
+| | What you were about to do next |
+
+Memory sync reads one folder — the runtime's own `projects\<project>\memory`. A session
+transcript does not live there and is not copied. So closing the laptop mid-task on Friday
+and opening the other machine on Saturday gives you the same environment and none of the
+thread: the agent knows how you work, not what you were doing.
+
+**Nothing writes a handoff for you.** If you want the work to continue elsewhere, leave a
+note before you stop — `handoff/` for an instruction to the other machine, `projects/` for
+state that spans sessions. Both are folders a person fills in. The sync will tell the other
+machine a new handoff exists; it will not invent one.
+
+The shipped [`skills/wrapup/`](skills/wrapup/SKILL.md) is that step: ask for it when you
+finish, and it writes the memory, the project state, and the handoff if one is needed. It
+still has to be asked. A hook cannot do it — the session-end hook fires after every turn,
+which is the wrong granularity, and nothing here can summarise a conversation anyway.
+
+**And give the upload a moment.** The sync writes into the vault when a session ends, but
+your cloud client still has to send it. Shut the machine down seconds later and the last
+thing written may never leave — and nothing warns you, because the log stays on the machine
+you walked away from.
 
 **It reads an agent runtime's internal memory folder.** Memory sync locates the local
 store by walking the runtime's own project directory layout. That layout is undocumented

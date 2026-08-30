@@ -1,0 +1,50 @@
+name: Fresh install report
+description: You installed this on a Windows machine that started with nothing. Say what happened.
+title: "Fresh install: "
+labels: ["fresh-install"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This is the most useful thing anyone can send. The install is covered by tests on a
+        clean CI runner, but a test cannot tell whether an instruction was confusing, and
+        the number of people who have followed these words on their own machine is very
+        small. **A report saying nothing broke is worth just as much as one saying it did.**
+  - type: dropdown
+    id: outcome
+    attributes:
+      label: How far did you get?
+      options:
+        - Finished - it works
+        - Finished, but something was confusing or wrong along the way
+        - Got stuck partway
+        - Could not start
+    validations: { required: true }
+  - type: textarea
+    id: log
+    attributes:
+      label: The sync log
+      description: "`sync\\sync-log-<machine>.md` from your vault. Paste it whole - the counts are the diagnosis."
+      render: text
+  - type: textarea
+    id: friction
+    attributes:
+      label: What was unclear, surprising, or wrong?
+      description: |
+        Instructions you had to re-read, a step that assumed something you did not have, a
+        moment you were not sure whether it had worked. Small things count - this is the
+        part CI cannot see.
+  - type: input
+    id: env
+    attributes:
+      label: Windows version, PowerShell version, sync service
+      placeholder: "Windows 11 24H2, PowerShell 5.1, OneDrive"
+  - type: checkboxes
+    id: steps
+    attributes:
+      label: Which steps did you actually run?
+      options:
+        - label: "`-Mode Report` first"
+        - label: "`-Mode Initialize`"
+        - label: Second machine against the same vault
+        - label: Ran the shipped `wrapup` skill at least once

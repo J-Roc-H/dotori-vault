@@ -93,6 +93,20 @@ the build on anything still shaped like an unaccounted-for machine name.
 attached — conflicts, missing lifecycle fields, per-runtime coverage. The ones that had no
 counter drifted without anyone noticing.
 
+**But not everything deserves to be a convention.** Auditing the documents against the rule
+above turned up eight conventions with no counter, and building eight counters would have
+been the wrong answer — the system would have grown to satisfy its own documentation. A
+convention earns a counter when its drift is *silent*, *harmful*, and *unambiguous*. If it
+cannot be counted without guessing, the convention is either underspecified or should not
+exist; fix that instead of approximating it. Two of those eight were removed rather than
+measured: one asked an entry document to duplicate a list the log already owns, and one
+promised a report about a vault this tool does not read.
+
+**A convention with no act is broken the same way.** The mirror image of the counting rule,
+and easier to miss: the lifecycle, the handoff folder and the project state all shipped with
+their audits and without the routine that fills them. Whoever writes the system usually has
+that routine by habit, which is exactly why they cannot see it missing.
+
 **Fail closed, and never weaken the check to get past it.** When the publish gate blocked
 a document, the fix was to drop the document and write a new one for publication — not to
 loosen the pattern.

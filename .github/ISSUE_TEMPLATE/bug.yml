@@ -1,0 +1,22 @@
+name: Bug
+description: Something behaves differently from what the documents say.
+labels: ["bug"]
+body:
+  - type: textarea
+    id: log
+    attributes:
+      label: The sync log
+      description: "`sync\\sync-log-<machine>.md`. Most reports cannot be answered without it - the log is built to make the diagnosis obvious."
+      render: text
+    validations: { required: true }
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected, and where the documents say so
+      description: A file and line is ideal. If the documents are what is wrong, that is a bug too - arguably the worse kind.
+    validations: { required: true }
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened instead
+    validations: { required: true }

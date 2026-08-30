@@ -12,13 +12,19 @@
 # would silently bind to the wrong slot (-KeepBackups landing in -VaultRoot).
 [CmdletBinding()]
 param(
-    [ValidateSet('Initialize', 'Sync')][string]$Mode = 'Sync',
+    [ValidateSet('Initialize', 'Sync', 'Report')][string]$Mode = 'Sync',
     [string]$VaultRoot,
     [string]$ClaudeRoot,
     [string]$ClaudeHome,
     [string]$CodexHome,
+    # Must mirror scripts\sync-ai-shared.ps1 exactly. -VaultGitOrigin was missing here,
+    # which made the parameter documented for bootstrapping a second machine impossible
+    # to pass through the entry point the install instructions actually name.
+    [string]$VaultGitOrigin,
     [string]$AntigravityHome,
     [string]$MirrorRoot,
+    [string]$MachineKey,
+    [int]$StaleHandoffDays,
     [int]$KeepBackups
 )
 

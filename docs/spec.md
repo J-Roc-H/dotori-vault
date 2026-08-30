@@ -58,9 +58,21 @@ Folder names above are the contract. Anything else in the vault is ignored.
 
 ## 3. Machine identity
 
-A machine key is a short stable string identifying one machine. This implementation uses
-the operating-system account name. Any implementation may choose its own source **as long
-as it is stable across runs on that machine and distinct between machines.**
+A machine key is a short stable string identifying one machine. Any implementation may
+choose its own source **as long as it is stable across runs on that machine and distinct
+between machines.**
+
+**Do not use the account name.** This implementation did, and it satisfies only the first
+half of that rule: an account name identifies a person, not a machine. Two machines signed
+in as the same account -- one person's work and home PC, two boxes both using `user` or
+`Administrator`, or one cloud account deriving the same local profile on both -- collapse
+onto a single set of filenames and overwrite each other's baseline, which is the failure
+this section exists to prevent. This implementation now derives the key from the computer
+name.
+
+**Stability and distinctness cannot be assumed; the second half must be checked.** Any key
+source can collide. An implementation must write, alongside the manifest, a value unique to
+that installation, and must compare it on every run:
 
 Three files are named from it. There is no machine registry and no machine count anywhere:
 
@@ -73,6 +85,13 @@ Three files are named from it. There is no machine registry and no machine count
 **Required behaviour:** never read another machine's manifest, and never pull another
 machine's index. Both are that machine's private view; adopting either silently destroys
 its state.
+
+**Required behaviour:** on reading a manifest under this machine's key, compare the
+recorded installation fingerprint with this installation's own. If they differ, two
+machines share a key: **stop with an error.** Do not adopt the baseline, and do not
+silently pick a new key -- the operator has to decide. A collision that only produces
+conflict copies is survivable; a collision that is adopted as a baseline mis-reconciles
+memory.
 
 **Why per machine at all:** these files are rewritten on every session start and stop.
 One shared copy in a cloud-synced folder produces conflict copies — in a recorded case,
@@ -90,6 +109,8 @@ baseline.
   "schema": 2,
   "updated": "2026-01-20T14:31:02.1234567+09:00",
   "source": "<absolute path to the vault>",
+  "machine": "<machine key>",
+  "machineFingerprint": "<value unique to this installation>",
   "files": [
     {
       "relative": "agents\\example-reviewer.md",
@@ -105,6 +126,8 @@ baseline.
 | Field | Meaning |
 |---|---|
 | `schema` | Currently `2`. An implementation reading a lower number must migrate, not fail |
+| `machine` | The key this manifest is named from. Informational |
+| `machineFingerprint` | Unique to the installation that wrote it. Generated once, kept **outside** the vault, never synced. A different value under the same key means two machines share that key |
 | `files[].relative` | Path from the vault root. **Backslash-separated on Windows** — an implementation on another separator must normalize on read and write |
 | `files[].shared` | Hash of the vault's copy at the end of the last run |
 | `files[].<runtime>` | Hash of that runtime's published copy. Key name is the runtime's id |
@@ -270,6 +293,7 @@ does correctly.
 | 6 | A missing runtime never fails the run |
 | 7 | The git directory is never inside the vault |
 | 8 | A missing manifest never authorizes overwriting local state |
+| 9 | A machine key collision is detected and stops the run, never adopted |
 
 ---
 
@@ -282,3 +306,16 @@ Two implementations share a vault correctly if, after each has run twice:
 - an edit made on both sides is reported as a conflict and neither file is modified
 - an encoding-only difference is resolved without reporting a conflict
 - neither machine's manifest, log or memory index has been written by the other
+- two machines forced onto the same key stop with a collision error rather than
+  overwriting each other
+
+This repository executes that check rather than only describing it:
+[`tests/Conformance.Tests.ps1`](../tests/Conformance.Tests.ps1) builds two machines in a
+temporary tree — one shared vault, a separate runtime home and mirror per machine — and
+runs the implementation end to end against each point above. Every path the script touches
+is a parameter, which is what makes that possible; an implementation that hardcodes any of
+them cannot be conformance-tested, and that is a reason to treat hardcoding as a defect.
+
+A second implementation should be able to take the same list and produce its own harness.
+If it can also share a vault with this one and both harnesses stay green, the two
+interoperate.
