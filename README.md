@@ -1,15 +1,6 @@
 # DOTORI
 
-**DOcuments TO Real Intelligence**
-
 *일터에서 갖춘 AI 작업 환경을 집에서 그대로. 규칙·스킬·기억이 기기와 AI를 따라옵니다.*
-
-> **Windows-first, on purpose.** PowerShell 5.1, nothing to install, no runtime to manage.
-> Most tooling in this space assumes a Unix machine and leaves Windows users to adapt it;
-> this one is the other way round.
->
-> Not on Windows? [docs/spec.md](docs/spec.md) is the on-disk contract — this script is one
-> implementation of it, and a second one on another platform can share the same vault.
 
 You tune an AI coding agent at work until it actually knows how you work. Then you get
 home, open the same agent on your own machine, and it knows none of it.
@@ -19,6 +10,41 @@ the same agent definitions, the same memory — from one shared folder of plain 
 It does the same across agents, so what you taught one is not lost when you use another.
 
 No database. No service. No daemon. No `.git` directory inside your cloud-synced vault.
+
+*(DOcuments TO Real Intelligence, if you were wondering.)*
+
+## Read this before you read anything else
+
+**If you can put a git remote between your machines, use something else.**
+[skillshare](https://github.com/runkids/skillshare) covers sixty-odd agent tools where this
+covers three, runs on macOS and Linux as well as Windows, syncs bidirectionally, and is
+maintained by people who are not one person with a day job. If your two machines can both
+reach the same repository, that is a better tool than this one and you should go and get it.
+
+DOTORI exists for the case where they cannot. On a work machine, pushing your setup to a
+personal remote may be against policy, technically blocked, or simply something you do not
+want to do. A folder your employer already syncs crosses that boundary where a remote will
+not, and everything here follows from that one constraint.
+
+Two other things are unusual enough to name, since they are the reason to look at this at
+all rather than merely a smaller version of the alternatives:
+
+- **Memory has a lifecycle with a gate on it.** Not "files copied both ways" —
+  a status field where `verified` requires *named* evidence (a path, a commit, test output),
+  where inference is explicitly not evidence, and where only a person may mark something
+  promoted. Every run counts what claims a status it has not earned. See
+  [docs/memory.md](docs/memory.md).
+- **The layout is a contract, not an implementation detail.** [docs/spec.md](docs/spec.md)
+  defines it precisely enough to write a second implementation that shares a vault with this
+  one, with nine invariants and a conformance check that
+  [runs on every commit](tests/Conformance.Tests.ps1) rather than sitting in prose.
+
+**If you only read one document, read [docs/evolution.md](docs/evolution.md).** Every
+structure here replaced one that failed in a specific way, and the failures are the useful
+part — most of them are not specific to this tool or this platform.
+
+> **Windows and PowerShell 5.1.** That is what its author runs, not a claim that it is
+> better there. The spec is the portable part; the script is one implementation of it.
 
 ## The problem it solves
 
@@ -46,18 +72,25 @@ DOTORI keeps one source of truth and publishes it outward:
 **Neither dimension has a fixed size.** Two is the case it was built for, but nothing in
 the code counts machines — keys come from the computer name, so a third takes
 zero code changes. If two of your machines share a computer name, pass `-MachineKey`; the
-run stops with an error rather than letting them overwrite each other. And it is useful on a single machine too, if what you want is several
-agents sharing one set of skills and definitions. A runtime that is not installed is
-skipped with a warning, never an error.
+run stops with an error rather than letting them overwrite each other. A runtime that is
+not installed is skipped with a warning, never an error.
+
+### You do not need two computers for this to be worth anything
+
+Most of the value shows up on one machine: two agent runtimes reading the same skills and
+the same agent definitions, so what you teach one is not lost when you open the other. That
+needs no cloud folder and no second computer, and it is the part you can try in ten minutes
+— see [docs/quickstart.md](docs/quickstart.md).
+
+The second machine adds memory that travels. It is the case this was built for, but it is
+not the entry price.
 
 ### Why a cloud folder and not a git remote
 
-Because one of these machines is usually a work machine. Pushing it to your personal
-remote may be against policy, technically blocked, or simply something you do not want.
-A synced folder crosses that boundary where a remote will not.
-
-The git history is still there — it just lives outside the vault, on each machine, and
-pushing anywhere is a separate decision you make deliberately.
+Covered above, and it is the whole reason this exists rather than being one more skills
+syncer. Worth adding: **the git history is still there.** It lives outside the vault, on
+each machine, and pushing it anywhere is a separate decision you make deliberately —
+not a precondition for the tool to work.
 
 ## What it does
 

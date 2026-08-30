@@ -46,6 +46,30 @@ person who wrote it. Every one of them is invisible on the machine it grew up on
 
 ### Changed
 
+- **The README now names a better tool and tells most readers to go use it.** Before writing
+  any positioning, the obvious question got asked out loud: does anything already do this?
+  It does. [skillshare](https://github.com/runkids/skillshare) syncs skills, agents and rules
+  across sixty-odd AI CLI tools where this reaches three, runs on macOS and Linux as well as
+  Windows, syncs bidirectionally, ships a prompt-injection audit, and went from nothing to
+  two thousand stars in under five months. On the axis this README used to lead with —
+  publishing one source out to several runtimes — it is comprehensively the better answer.
+
+  So the README leads with the constraint that actually separates them instead: skillshare
+  moves things through a git repository, and on a work machine that is frequently the one
+  thing you cannot do. A folder your employer already syncs crosses a boundary a remote will
+  not. Two other things survived the comparison and are now stated up front rather than
+  buried: memory with a lifecycle and an evidence gate, and a layout published as a contract
+  with invariants and a conformance suite. Neither turned up elsewhere.
+
+  Also demoted: the backronym that used to be the second line, and the "Windows-first, on
+  purpose" framing — the alternative runs on Windows too, so that was a distinction doing no
+  work. And promoted: the pointer to `docs/evolution.md`, which sat at line 216 of a
+  371-line file despite being the thing most worth reading, and the fact that two runtimes
+  on **one** machine is most of the value and needs no cloud folder at all.
+
+  This is the check that the honesty rule was always pointing at. An earlier draft of the
+  strategy behind this branch asserted there was no comparable project; that claim would
+  have been falsified by one search, by the first person who tried.
 - **The headline promised the wrong thing.** It said you could carry on at home the *work*
   you were doing at the office. What actually travels is the *environment* — rules, skills,
   agent definitions, and memory that was written down. The conversation does not: memory
