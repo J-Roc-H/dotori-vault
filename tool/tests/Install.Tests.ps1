@@ -212,7 +212,7 @@ Describe 'The install procedure in README.md, performed literally' {
         $m = Register-Install (New-FreshMachine)
         Install-Documented $m 'Initialize'
 
-        ($global:LastInstallWarnings -join ' ') | Should -Match 'nothing here recognises'
+        ($global:LastInstallWarnings -join ' ') | Should -Match 'does not look like a folder'
         [IO.File]::ReadAllText((Join-Path $m.Vault 'sync\sync-log-FRESH-1.md')) |
             Should -Match 'no sync service recognised'
     }
@@ -223,7 +223,7 @@ Describe 'The install procedure in README.md, performed literally' {
         $m = Register-Install (New-FreshMachine 'OneDrive\dotori')
         Install-Documented $m 'Initialize'
 
-        ($global:LastInstallWarnings -join ' ') | Should -Not -Match 'nothing here recognises'
+        ($global:LastInstallWarnings -join ' ') | Should -Not -Match 'does not look like a folder'
         # Match the parenthesised verdict, not the bare word: the vault path itself
         # contains 'OneDrive', so a looser pattern would pass even if the hint failed.
         [IO.File]::ReadAllText((Join-Path $m.Vault 'sync\sync-log-FRESH-1.md')) |
