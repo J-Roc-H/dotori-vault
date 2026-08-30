@@ -1,20 +1,169 @@
 # DOTORI
 
-*일터에서 갖춘 AI 작업 환경을 집에서 그대로. 규칙·스킬·기억이 기기와 AI를 따라옵니다.*
+### Teach one AI. Keep it across all your AIs.
 
-You tune an AI coding agent at work until it actually knows how you work. Then you get
-home, open the same agent on your own machine, and it knows none of it.
+Claude에서 만든 규칙과 스킬을 Codex를 열어도 그대로 사용합니다.
+회사 PC에서 배운 작업 방식은 집 PC에서도 그대로 이어집니다.
 
-DOTORI carries that setup between the machines you use — the same rules, the same skills,
-the same agent definitions, the same memory — from one shared folder of plain Markdown.
-It does the same across agents, so what you taught one is not lost when you use another.
+**One AI workspace. Any runtime. Any machine.**
 
-No database. No service. No daemon. No `.git` directory inside your cloud-synced vault.
+No API. No database. No service. No daemon.
+No `.git` directory inside your cloud-synced vault.
+Just one shared folder of Markdown.
+
+```
+                    ┌──────────────┐
+                    │    DOTORI    │
+                    │ shared state │
+                    └──────┬───────┘
+         ┌─────────────────┼─────────────────┐
+         ↓                 ↓                 ↓
+      Claude             Codex          Antigravity
+      rules              rules             rules
+      skills             skills            skills
+      agents             agents             n/a
+         │                 │                 │
+         └─────────────────┴─────────────────┘
+                           │
+                       same memory
+                           │
+                 ┌─────────┴─────────┐
+                 ↓                   ↓
+              Work PC             Home PC
+```
+
+**DOTORI gives multiple AI runtimes one shared working environment.**
+Rules, skills, agents and memory live once, then follow you across runtimes and machines.
+
+`n/a` is not a gap to be filled later: Antigravity has no documented convention for agent
+definitions, and this publishes nothing to a path it has not verified. The log says `n/a`
+for the same reason the diagram does.
 
 *A squirrel buries acorns in scattered places and comes back for them later.
 That is the whole idea. (도토리 — acorn.)*
 
-## Read this before you read anything else
+## DOTORI is for you if...
+
+- [ ] **Claude와 Codex를 번갈아 쓴다** — you switch between agent runtimes
+- [ ] **AI마다 같은 규칙을 다시 넣는 게 귀찮다** — you re-teach every new agent the same rules
+- [ ] **회사와 집에서 같은 AI 환경을 유지하고 싶다** — you want one environment on both machines
+
+## The moment it matters
+
+**Before**
+
+```
+   at work                        at home
+   ┌──────────────┐               ┌──────────────┐
+   │    Claude    │               │    Codex     │
+   │              │               │              │
+   │  rules       │               │  (nothing)   │
+   │  skills      │   ───── ✗ ──> │              │
+   │  agents      │               │  "so, let me │
+   │  memory      │               │   explain    │
+   │              │               │   again..."  │
+   └──────────────┘               └──────────────┘
+```
+
+**With DOTORI**
+
+```
+   at work                        at home
+   ┌──────────────┐               ┌──────────────┐
+   │    Claude    │               │    Codex     │
+   └──────┬───────┘               └──────▲───────┘
+          │                              │
+          │        ┌──────────────┐      │
+          └───────>│    DOTORI    │──────┘
+                   │              │
+                   │  rules       │
+                   │  skills      │
+                   │  agents      │
+                   │  memory      │
+                   └──────────────┘
+
+     "내가 쓰던 AI 작업환경" — the setup you already had, wherever you opened it
+```
+
+## You do not need two computers for this to be worth anything
+
+Most of the value shows up on one machine: two agent runtimes reading the same skills and
+the same agent definitions, so what you teach one is not lost when you open the other. That
+needs no cloud folder and no second computer, and it is the part you can try in ten minutes
+— below.
+
+The second machine adds memory that travels. It is the case this was built for, but it is
+not the entry price.
+
+## See it in 10 minutes
+
+On a scratch path you delete at the end. Nothing here touches your real vault, settings
+files or runtime folders — but that is because **every path is redirected**, not because
+there is a safe mode. Build the scratch tree first and reuse it in every command below:
+
+```powershell
+$demo = "$env:TEMP\dotori-demo"; $a = "$demo\machine-a"
+mkdir "$a\claude\agents", "$a\claude\skills", "$a\claude\projects\demo\memory", `
+      "$a\codex", "$a\antigravity", "$a\local", "$demo\vault" -Force | Out-Null
+$scratch = @{
+  VaultRoot  = "$demo\vault"; ClaudeHome      = "$a\claude"; ClaudeRoot = "$a\claude-root"
+  CodexHome  = "$a\codex";    AntigravityHome = "$a\antigravity"
+  MirrorRoot = "$a\local";    MachineKey      = 'DEMO-A'
+}
+```
+
+> **Pass `@scratch` to every command in this section.** `-Mode Initialize` with only
+> `-VaultRoot` redirected still writes session hooks into your **real** runtime settings
+> files — that is the ordinary install doing its job, aimed at the wrong place.
+
+**1. Look before anything runs.** This mode is read-only: it resolves every path, names
+the runtimes it found, and prints the exact hook line it *would* add.
+
+```powershell
+.\tool\sync-ai-shared.ps1 -Mode Report @scratch
+```
+
+**2. Put one agent in DOTORI** as ordinary Markdown — `demo-reviewer.md`, with a
+`description` and a `tools:` restriction in its frontmatter.
+
+**3. Run Initialize** against that same scratch tree:
+
+```powershell
+.\tool\sync-ai-shared.ps1 -Mode Initialize @scratch
+```
+
+**4. Open the Codex side.** The Markdown you wrote is now in the format that runtime
+expects — description and tool restriction intact:
+
+```toml
+name = "demo-reviewer"
+description = "Checks a draft against the project standards before it ships."
+tools = ["Read", "Glob"]
+developer_instructions = '''
+You verify. You do not implement.
+'''
+```
+
+**5. Add a second machine** against the same vault. The memory the first one wrote is
+already there, without either machine reading the other's sync state.
+
+**That's DOTORI.** That conversion in step 4 is the thing a file-sync tool cannot do for
+you, and every run leaves a log saying exactly what moved:
+
+```
+Agents synced: 5
+Runtimes: agent-a agents=5 skills=14 | agent-b agents=5 skills=14 | agent-c agents=n/a skills=14
+Skills synced: 14 skill(s) / 14 file(s)
+Memory: pushed 3 / pulled 0 / normalized 0 / conflicts 0
+```
+
+The full copy-pasteable walkthrough, including watching it refuse to merge a real
+conflict, is [docs/quickstart.md](docs/quickstart.md).
+
+> **Windows and PowerShell 5.1.** That is what its author runs, not a claim that it is
+> better there. The spec is the portable part; the script is one implementation of it.
+
+## When NOT to use DOTORI
 
 **If you can put a git remote between your machines, use something else.**
 [skillshare](https://github.com/runkids/skillshare) covers sixty-odd agent tools where this
@@ -27,8 +176,10 @@ personal remote may be against policy, technically blocked, or simply something 
 want to do. A folder your employer already syncs crosses that boundary where a remote will
 not, and everything here follows from that one constraint.
 
-Two other things are unusual enough to name, since they are the reason to look at this at
-all rather than merely a smaller version of the alternatives:
+## What is unusual about it
+
+Two things are unusual enough to name, since they are the reason to look at this at all
+rather than merely a smaller version of the alternatives:
 
 - **Memory has a lifecycle with a gate on it.** Not "files copied both ways" —
   a status field where `verified` requires *named* evidence (a path, a commit, test output),
@@ -44,10 +195,10 @@ all rather than merely a smaller version of the alternatives:
 structure here replaced one that failed in a specific way, and the failures are the useful
 part — most of them are not specific to this tool or this platform.
 
-> **Windows and PowerShell 5.1.** That is what its author runs, not a claim that it is
-> better there. The spec is the portable part; the script is one implementation of it.
-
 ## The problem it solves
+
+You tune an AI coding agent at work until it actually knows how you work. Then you get
+home, open the same agent on your own machine, and it knows none of it.
 
 Two machines you cannot merge: the one at work and the one at home. Same person, same
 habits, two environments that drift apart the moment you configure either one.
@@ -79,16 +230,6 @@ the code counts machines — keys come from the computer name, so a third takes
 zero code changes. If two of your machines share a computer name, pass `-MachineKey`; the
 run stops with an error rather than letting them overwrite each other. A runtime that is
 not installed is skipped with a warning, never an error.
-
-### You do not need two computers for this to be worth anything
-
-Most of the value shows up on one machine: two agent runtimes reading the same skills and
-the same agent definitions, so what you teach one is not lost when you open the other. That
-needs no cloud folder and no second computer, and it is the part you can try in ten minutes
-— see [docs/quickstart.md](docs/quickstart.md).
-
-The second machine adds memory that travels. It is the case this was built for, but it is
-not the entry price.
 
 ### Why a cloud folder and not a git remote
 
@@ -140,7 +281,7 @@ Nothing is added inside the vault.
 | Not required | |
 |---|---|
 | A note-taking app | The vault is plain Markdown folders. Obsidian opens it happily and so does anything else; nothing here depends on one. The `.obsidian/` entries in the git exclude list are inert if you do not use it |
-| iCloud specifically | The **default path** happens to point at one, because defaults have to point somewhere. Override it with `-VaultRoot`. If the folder you name does not exist, the install stops rather than quietly creating a local folder that syncs nowhere |
+| iCloud specifically | The **default path** happens to point at one, because defaults have to point somewhere. Override it with `-VaultRoot`. If its **parent** does not exist — usually because the default assumes a cloud client you do not have — the install stops rather than building that whole chain and reporting success. If the parent exists the folder is created, and `Initialize` warns when the location does not look like one a sync service carries |
 | git | Only for keeping vault history. Sync works without it; a missing or failing git is logged and skipped |
 | python | Only for the optional search index, which is not part of this repository |
 
@@ -210,8 +351,10 @@ Runtimes: agent-a agents=5 skills=14 | agent-b agents=5 skills=14 | agent-c agen
 Skills synced: 14 skill(s) / 14 file(s)
 Memory: pushed 3 / pulled 0 / normalized 0 / conflicts 0
 Mirror: committed 4 path(s)
+Vault location: C:\Users\you\OneDrive\dotori (OneDrive)
 Lifecycle: active=80 verified=6 / no-status=0
 Promoted: 3 memory(ies) with a human-vault destination
+Legacy promoted status: 0 memory(ies) to migrate
 Cloud conflict copies: 0
 ```
 
@@ -328,11 +471,11 @@ Which is why the repository is split the way it is:
 | `tool/` | Everything that executes. The shim, the implementation, the tests |
 | `vault_ai/` | Starting content for the agent vault. Right now that is the wrapup skill; `Initialize` creates the rest of the folders, because git does not track empty ones |
 | `vault_human/` | Starting skeleton and templates for the human vault |
-
-These last two are named generically because a repository has to explain both sides to a
-stranger. **They are not names your own folders have to take** — see
-[docs/spec.md](docs/spec.md#where-the-vault-sits).
 | `docs/` | The contract and the reasoning, including the sample workspace |
+
+`vault_ai/` and `vault_human/` are named generically because a repository has to explain
+both sides to a stranger. **They are not names your own folders have to take** — see
+[docs/spec.md](docs/spec.md#where-the-vault-sits).
 
 **Three different roots, and confusing them costs you.** The repository root is what you
 are reading. The tool root is `tool/`. The vault root is on your own disk and is where the
