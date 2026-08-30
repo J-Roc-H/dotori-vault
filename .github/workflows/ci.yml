@@ -25,7 +25,7 @@ jobs:
           Install-Module Pester -Force -Scope CurrentUser -SkipPublisherCheck -MinimumVersion 5.0.0
           Import-Module Pester -MinimumVersion 5.0.0
           $config = New-PesterConfiguration
-          $config.Run.Path = 'tests'
+          $config.Run.Path = 'tool/tests'
           $config.Output.Verbosity = 'Detailed'
           $config.Run.Exit = $true
           Invoke-Pester -Configuration $config
@@ -38,6 +38,14 @@ jobs:
           $found = Invoke-ScriptAnalyzer -Path . -Recurse -Severity Error
           $found | Format-Table -AutoSize
           if ($found) { throw "PSScriptAnalyzer reported $($found.Count) error(s)." }
+
+      - name: Documentation links must resolve
+        shell: powershell
+        run: |
+          # Moving a file is how docs rot. This change broke seven relative links and
+          # reading caught none of them.
+          python tool/ci/check-links.py .
+          if ($LASTEXITCODE -ne 0) { throw "Broken relative link(s) in documentation." }
 
       - name: Scripts must stay ASCII-only
         shell: powershell

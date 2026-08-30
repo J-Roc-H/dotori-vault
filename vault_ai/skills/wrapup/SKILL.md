@@ -26,7 +26,7 @@ Ask: **will this be true again next time, in another project?** If not, it is se
 noise. Do not record it.
 
 If yes, write or update a memory in the runtime's own memory folder — the one DOTORI
-mirrors — using the schema in [docs/memory.md](../../docs/memory.md):
+mirrors — using the schema in [docs/memory.md](../../../docs/memory.md):
 
 ```yaml
 ---
@@ -95,7 +95,7 @@ pays to read the router.
 
 | | Why |
 |---|---|
-| Promote anything into your human knowledge base | A person approves that. See [docs/candidates.md](../../docs/candidates.md) |
+| Promote anything into your human knowledge base | A person approves that. See [docs/candidates.md](../../../docs/candidates.md) |
 | Set `status: promoted` | Same reason — never set by an agent |
 | Delete a memory | Retiring one is deliberate; the sync restores anything deleted locally |
 | Run by itself | It fires when you ask. A session-end hook fires after every turn, which is the wrong granularity, and an unasked-for wrapup writes noise |

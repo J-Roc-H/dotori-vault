@@ -10,9 +10,11 @@
 # dot-sourced.
 
 BeforeAll {
-    $script:RepoRoot   = Split-Path -Parent $PSScriptRoot
-    $script:RealScript = Join-Path $script:RepoRoot 'scripts\sync-ai-shared.ps1'
-    $script:ShimScript = Join-Path $script:RepoRoot 'sync-ai-shared.ps1'
+    # tool/ holds what executes; the repository root above it holds the vaults and docs.
+    $script:ToolRoot    = Split-Path -Parent $PSScriptRoot
+    $script:ProjectRoot = Split-Path -Parent $script:ToolRoot
+    $script:RealScript = Join-Path $script:ToolRoot 'scripts\sync-ai-shared.ps1'
+    $script:ShimScript = Join-Path $script:ToolRoot 'sync-ai-shared.ps1'
     $script:RealText   = [IO.File]::ReadAllText($script:RealScript)
     $script:ShimText   = [IO.File]::ReadAllText($script:ShimScript)
 
@@ -145,7 +147,7 @@ Describe 'Agent conversion keeps what the definition declares' {
         Convert-ClaudeAgentToToml $raw 'r' | Should -Match 'tools = \["Read", "Glob", "Grep"\]'
     }
     It 'converts the example agent shipped in this repository' {
-        $sample = Join-Path $script:RepoRoot 'examples\sample-workspace\ai-vault\agents\example-reviewer.md'
+        $sample = Join-Path $script:ProjectRoot 'docs\examples\sample-workspace\vault_ai\agents\example-reviewer.md'
         $toml = Convert-ClaudeAgentToToml ([IO.File]::ReadAllText($sample)) 'example-reviewer'
         $toml | Should -Not -Match 'description = ""'
     }

@@ -13,7 +13,7 @@ runtimes installed if you want to see publication actually land somewhere.
 
 ```powershell
 cd <where you cloned this repo>
-powershell -NoProfile -ExecutionPolicy Bypass -File .\sync-ai-shared.ps1 `
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tool\sync-ai-shared.ps1 `
   -Mode Report -VaultRoot "$env:TEMP\dotori-demo\vault" `
   -MirrorRoot "$env:TEMP\dotori-demo\local"
 ```
@@ -78,7 +78,7 @@ $common = @{
   CodexHome = "$a\codex";    AntigravityHome = "$a\antigravity"
   MirrorRoot = "$a\local";   MachineKey = 'DEMO-A'
 }
-.\scripts\sync-ai-shared.ps1 -Mode Initialize @common
+.\tool\scripts\sync-ai-shared.ps1 -Mode Initialize @common
 ```
 
 No hook is installed, because there is no `settings.json` in the scratch runtime folder —
@@ -112,7 +112,7 @@ $commonB = @{
   CodexHome = "$b\codex";    AntigravityHome = "$b\antigravity"
   MirrorRoot = "$b\local";   MachineKey = 'DEMO-B'
 }
-.\scripts\sync-ai-shared.ps1 -Mode Initialize @commonB
+.\tool\scripts\sync-ai-shared.ps1 -Mode Initialize @commonB
 
 Get-ChildItem "$b\claude\projects\demo\memory"
 ```
@@ -130,8 +130,8 @@ Edit the same memory differently on both machines, then sync both:
 Add-Content "$a\claude\projects\demo\memory\demo-lesson.md" "`nEdited on A."
 Add-Content "$b\claude\projects\demo\memory\demo-lesson.md" "`nEdited on B."
 
-.\scripts\sync-ai-shared.ps1 -Mode Sync @common
-.\scripts\sync-ai-shared.ps1 -Mode Sync @commonB
+.\tool\scripts\sync-ai-shared.ps1 -Mode Sync @common
+.\tool\scripts\sync-ai-shared.ps1 -Mode Sync @commonB
 
 Get-Content "$demo\vault\sync\sync-log-DEMO-B.md"
 ```
@@ -142,7 +142,7 @@ that way until you resolve it — no automatic merge, no last-writer-wins.
 Try the collision guard too, which is what stops two machines quietly sharing one identity:
 
 ```powershell
-.\scripts\sync-ai-shared.ps1 -Mode Sync @commonB -MachineKey 'DEMO-A'
+.\tool\scripts\sync-ai-shared.ps1 -Mode Sync @commonB -MachineKey 'DEMO-A'
 ```
 
 It stops with an error instead of adopting machine A's baseline.

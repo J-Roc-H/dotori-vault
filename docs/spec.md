@@ -54,6 +54,26 @@ it does not corrupt what 1 and 3 would need. Say so in its documentation.
 
 Folder names above are the contract. Anything else in the vault is ignored.
 
+### Where the vault sits
+
+The vault is normally one of two folders under a single synced workspace:
+
+```
+<workspace>/                    the folder your sync service carries between machines
++-- vault_ai/                   the vault this document specifies
++-- vault_human/                what a person knows. Not specified here
+```
+
+Two folders rather than one because they answer to different owners: agents write into
+`vault_ai/` constantly, a person writes into `vault_human/` deliberately, and a promotion
+from one to the other is supposed to feel like a decision. Sharing a root would make it
+feel like a move.
+
+**The workspace is a convention; only the vault is the contract.** An implementation is
+pointed at the vault directly and must not require a sibling to exist, must not read one,
+and must not create one. The names above are what this implementation's documentation
+uses so that two people describing their setup mean the same thing.
+
 ---
 
 ## 3. Machine identity
@@ -310,7 +330,7 @@ Two implementations share a vault correctly if, after each has run twice:
   overwriting each other
 
 This repository executes that check rather than only describing it:
-[`tests/Conformance.Tests.ps1`](../tests/Conformance.Tests.ps1) builds two machines in a
+[`tests/Conformance.Tests.ps1`](../tool/tests/Conformance.Tests.ps1) builds two machines in a
 temporary tree — one shared vault, a separate runtime home and mirror per machine — and
 runs the implementation end to end against each point above. Every path the script touches
 is a parameter, which is what makes that possible; an implementation that hardcodes any of

@@ -38,7 +38,7 @@ These cover ground this project cannot reach on its own, and they are the ones t
 answered first.
 
 **What your sync service does.** The conflict-copy shapes in
-[docs/multi-machine.md](docs/multi-machine.md) came from documentation and from one service
+[docs/multi-machine.md](../docs/multi-machine.md) came from documentation and from one service
 in daily use. If yours leaves something the log does not recognize, say what it looks like.
 Adding a shape is a one-line change.
 
@@ -66,7 +66,7 @@ file contains a non-ASCII byte. PowerShell 5.1 decodes a BOM-less script as ANSI
 stray non-ASCII literal becomes mojibake at runtime — hence the check rather than a note
 asking people to remember.
 
-Say in the PR which of the invariants in [docs/spec.md](docs/spec.md) section 9 your change
+Say in the PR which of the invariants in [docs/spec.md](../docs/spec.md) section 9 your change
 touches, if any. Changes to the spec itself are a conversation before they are a patch.
 
 ## What to expect
@@ -84,6 +84,6 @@ The vault is plain Markdown in folders and the git history is ordinary git. Noth
 holds your data hostage: delete the script and everything you have is still readable by
 anything that opens a text file.
 
-[docs/spec.md](docs/spec.md) is the on-disk contract, defined precisely enough to write
+[docs/spec.md](../docs/spec.md) is the on-disk contract, defined precisely enough to write
 another implementation against — that is the point of writing it down. If this repository
 goes quiet, the format outlives it, and a fork or a second implementation loses nothing.

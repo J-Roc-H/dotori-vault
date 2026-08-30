@@ -7,6 +7,40 @@ history contains private material. What is preserved is the order and the reason
 
 First public extraction. Nothing has been released yet.
 
+### The repository is now laid out as two vaults and a tool
+
+Reading the root, the author could not see the shape the project describes. `human-vault/`
+was a folder while the agent side was scattered as `skills/`, and executables sat in the
+root beside documentation. The two halves the whole design rests on were not visible as
+two halves.
+
+Nothing executes differently. This is a move, and the test suite passing unchanged is what
+says so.
+
+- **`tool/`** now holds everything that runs: the shim, `scripts/`, `tests/`, `brain-git.ps1`.
+- **`vault_ai/` and `vault_human/`** sit at the root as a matched pair. `skills/wrapup/`
+  moved under `vault_ai/`, which is where it always belonged — it is vault content, not
+  tool code. `vault_ai/README.md` says what is not in there and why (git does not track
+  empty folders; `Initialize` creates the tree).
+- **`docs/`** absorbed `examples/`, and the sample workspace's folders were renamed to
+  match. The sample was already the two-vault shape the root was not.
+- `CONTRIBUTING.md` moved to `.github/`, where GitHub still finds it.
+- `docs/spec.md` section 2 gained the workspace level above the vault, marked explicitly as
+  a **convention and not part of the contract**: the script has never known the human vault
+  exists, and an implementation must not require a sibling, read one, or create one.
+- `docs/upgrading.md` gained the folder move as an optional step, with the hook repair
+  spelled out. Renaming a vault folder invalidates every session hook pointing into it, and
+  a broken hook cannot run the sync that would fix it — so it is one machine at a time,
+  each confirmed before the next.
+
+Three roots exist now and confusing them is the mistake this layout is meant to prevent:
+the repository root, the tool root `tool/`, and the vault root on your own disk. The test
+variable called `RepoRoot` while meaning the tool root was renamed for the same reason.
+
+A link check was added to CI. Moving files broke seven relative links in this very change
+and every one of them was found by running it, not by reading — which is the argument for
+having it.
+
 ### Fixed after the first public review
 
 Five faults found by reading the published tree as a stranger would, rather than as the

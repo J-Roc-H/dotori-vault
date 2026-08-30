@@ -7,11 +7,11 @@ Every name, project, and memory here is fictional.
 
 ```
 sample-workspace/
-+-- human-vault/          what a person knows
++-- vault_human/          what a person knows
 |   +-- 00_Inbox/
 |   +-- 01_Writing/
 |   +-- 02_Dev/
-+-- ai-vault/             what agents need in order to work
++-- vault_ai/             what agents need in order to work
     +-- agents/
     +-- skills/
     +-- memory/claude-handoff/
@@ -19,6 +19,6 @@ sample-workspace/
     +-- sync/
 ```
 
-Read them in this order: `ai-vault/memory/claude-handoff/` to see what a memory looks
-like, then `ai-vault/handoff/` for how two machines hand work over, then
-`human-vault/02_Dev/GUIDE.md` for how routing lands somewhere.
+Read them in this order: `vault_ai/memory/claude-handoff/` to see what a memory looks
+like, then `vault_ai/handoff/` for how two machines hand work over, then
+`vault_human/02_Dev/GUIDE.md` for how routing lands somewhere.
