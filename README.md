@@ -62,10 +62,10 @@ DOTORI keeps one source of truth and publishes it outward:
 
 ```
    <workspace>/                one folder your sync service carries between machines
+   |                           (call these two whatever you already call them)
+   +-- <your human vault>/     what you know. Nothing publishes out of here
    |
-   +-- vault_human/            what you know. Nothing publishes out of here
-   |
-   +-- vault_ai/               what your agents know
+   +-- <your ai vault>/        what your agents know
            |
         +--+------------------+---------------------+
         |                     |                     |
@@ -328,6 +328,10 @@ Which is why the repository is split the way it is:
 | `tool/` | Everything that executes. The shim, the implementation, the tests |
 | `vault_ai/` | Starting content for the agent vault. Right now that is the wrapup skill; `Initialize` creates the rest of the folders, because git does not track empty ones |
 | `vault_human/` | Starting skeleton and templates for the human vault |
+
+These last two are named generically because a repository has to explain both sides to a
+stranger. **They are not names your own folders have to take** — see
+[docs/spec.md](docs/spec.md#where-the-vault-sits).
 | `docs/` | The contract and the reasoning, including the sample workspace |
 
 **Three different roots, and confusing them costs you.** The repository root is what you
@@ -337,6 +341,17 @@ shim goes — every machine bakes *that* path into its session hook.
 ## Known limitations
 
 Stated up front, because finding these yourself is worse than being told.
+
+**A folder that is not synced anywhere still installs cleanly.** Nothing here can ask
+Windows whether a folder replicates — sync clients are ordinary programs watching ordinary
+directories. So the vault location is checked against the shapes of the services it knows
+— Google Drive, OneDrive, iCloud Drive, Dropbox, Syncthing, Nextcloud, ownCloud, pCloud,
+MEGA, Resilio Sync, Sync.com and Yandex Disk — and `Initialize` **names them** when none
+match, rather than saying "a sync service" and leaving you to work out which of your folders
+it means. It is a guess and it says it is a guess. If it
+is right and you ignore it, everything on that machine still works and **nothing reaches a
+second computer**, because there is no second copy of the folder anywhere. `Vault location:`
+in the log is the standing answer.
 
 **The session itself does not travel.** This is the one people expect and do not get.
 

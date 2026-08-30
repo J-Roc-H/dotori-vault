@@ -22,6 +22,7 @@ param(
     # to pass through the entry point the install instructions actually name.
     [string]$VaultGitOrigin,
     [string]$AntigravityHome,
+    [string[]]$ExtraWorkspace,
     [string]$MirrorRoot,
     [string]$MachineKey,
     [int]$StaleHandoffDays,

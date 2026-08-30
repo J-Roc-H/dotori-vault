@@ -7,8 +7,8 @@ The README describes a first install. Until now nothing described a second one, 
 gap of the same kind as the others this project keeps finding: the documents covered the
 beginning and not the middle.
 
-Four things changed that touch an existing vault. None of them deletes anything, none of
-them rewrites a memory, and the last one is optional.
+Three things changed that touch an existing vault. None of them deletes anything and none
+of them rewrites a memory. A fourth section follows that is not an upgrade at all.
 
 ---
 
@@ -86,23 +86,35 @@ are left, every run.
 
 ---
 
-## 4. The vault is now documented as one of two folders (optional)
+## Not an upgrade: what your folders are called
 
-The layout this project documents is a workspace holding two vaults:
+This section is here because the one above it is numbered and this is not. **There is
+nothing to do here.** It is deliberately not step 4.
+
+The repository now ships its starting skeletons as `vault_ai/` and `vault_human/`, and
+documents the shape as a workspace holding two vaults:
 
 ```
 <workspace>/
-+-- vault_ai/       <- the vault. -VaultRoot points here
-+-- vault_human/
++-- <your ai vault>/       <- -VaultRoot points here
++-- <your human vault>/
 ```
 
-**Nothing in the code requires this.** The script has never known the human vault exists
-and still does not. `-VaultRoot` points at the AI vault, and it does not care what the
-folder is called or what sits beside it. This is a naming convention so that two people
-describing their setup mean the same thing, and adopting it is a decision you can decline
-at no cost.
+**Your folder names are yours.** The script has never known the human vault exists and
+still does not; `-VaultRoot` does not care what the folder is called or what sits beside
+it. The repository needs generic words because it has to explain both sides to a stranger.
+You are not a stranger to your own vault.
 
-### If you do move, read this first
+If yours are called `VAULT_AI` and `VAULT_JROC`, keep them. The second is a *better* name
+than `vault_human` — it says whose it is, which is the one thing a personal vault should
+say and the one thing a generic label cannot. The same goes for a vault that is not in a
+cloud folder at all, or is called something that only makes sense to you. Renaming your
+folders to match a repository is work with no payoff.
+
+The one thing worth copying is the **shape**: two folders rather than one, so that moving
+something across feels like the decision it is.
+
+### If you rename anyway, read this first
 
 **Renaming your vault folder breaks every session hook that points into it.** That is not
 a recoverable-by-syncing situation: the hook is what runs the sync, so a machine with a

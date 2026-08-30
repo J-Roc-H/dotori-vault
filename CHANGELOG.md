@@ -7,6 +7,78 @@ history contains private material. What is preserved is the order and the reason
 
 First public extraction. Nothing has been released yet.
 
+### The first run now says what it did and what it did not
+
+Walking a new user through the whole story — two runtimes on one machine, then a second
+machine the next morning — found three places it breaks, and one thing that should never
+have shipped.
+
+- **A vault that is not synced anywhere installed cleanly and said nothing.** The comment
+  at that very spot in the script calls this "the worst state it can be in", and the guard
+  covered exactly one route to it: a parent folder that does not exist. Point it at a
+  perfectly ordinary local folder and the run succeeded, silently, forever. `Initialize`
+  now checks the vault path against the shapes of the sync services it knows and warns
+  when none match, and the log carries `Vault location:` every run. It is a guess — there
+  is no way to ask Windows whether a folder replicates — and the message says so.
+- **The run ended in a counter dump.** `Skills synchronized: 14`, `Conflicts: 0`, and
+  nothing that answers "so what do I have now". `Initialize` now closes with what works on
+  this machine, whether anything reaches a second one, and what does not travel at all.
+  Only `Initialize`: in `Sync` it would fire after every turn and become wallpaper.
+- **`Vault_Personal` was hardcoded**, in a variable named after the author, publishing
+  skills into a sibling of the vault if that folder happened to exist. It was undocumented,
+  it was dead code for everyone else, and it broke the rule `docs/spec.md` section 2 sets
+  for every implementation: a sibling is never read and never written. It is now
+  `-ExtraWorkspace`, which does nothing unless you name somewhere. A folder the operator
+  names is not a sibling the tool went looking for.
+- **The messages said "a sync service" while the script knew twelve of them by name.** They
+  are named out loud now — Google Drive, OneDrive, iCloud Drive, Dropbox, Syncthing and
+  others — from the same list the check itself uses, so the prose cannot drift into
+  advertising a service the check does not look for. An abstraction is a poor instruction
+  to anyone, and to a reader whose first language is not English "a sync service" may not
+  even read as being about the drive they already have.
+- **The closing summary pointed at a warning that may have scrolled away.** `Initialize`
+  prints about forty lines and a default console window holds thirty, so "see the warning
+  above" could refer to something no longer on screen — the one line in the run that most
+  needs reading. The summary now restates the vault path, the services it did not match,
+  and the exact `-VaultRoot` to pass instead.
+- **The first file a new vault contained told the reader to consult two things that do not
+  exist.** The seeded `shared-rules.md` opened with "Read the current Vault_Personal
+  guidance and project devref before editing" — both of them the author's. It is generic
+  now. This is the very first content DOTORI hands someone, which is the worst possible
+  place to put a private reference.
+- `Initialize` does not create a human vault, and now says so. The author believed it did,
+  which is a fair reading of a README that draws both vaults side by side.
+
+The test that matters most here is the one asserting nothing is written outside the vault
+when `-ExtraWorkspace` is not passed. The hardcoded path survived this long because no test
+ever looked outside.
+
+### Your vault is called whatever you call it
+
+The repository's folders were renamed to `vault_ai/` and `vault_human/`, and the author —
+whose own folders are `VAULT_AI` and `VAULT_JROC` — read that as a rename he was now
+obliged to perform. Two documents already said the layout was optional. It was still the
+wrong impression to leave, and chasing it down turned up a real fault underneath.
+
+- **The backup was named after one person's vault.** `Initialize` wrote
+  `Vault_AI-backup-<timestamp>/Vault_AI/` regardless of what the vault was actually
+  called, so anyone else's data was copied into a stranger's directory name and a restore
+  would have put it back under the wrong one. It now takes the name from the vault it is
+  backing up. Nothing tested the backup path, which is how one person's setup stayed
+  disguised as a general one for this long; there is a test now.
+- The remaining `Vault_AI` mentions in log output and comments are gone. What is left is
+  the default `-VaultRoot`, which is a real person's path and documented as one.
+- `docs/spec.md` now leads with the rule instead of the diagram, and the diagram says
+  `<your ai vault>/` rather than a name. An implementation that behaves differently based
+  on the folder name is explicitly not conformant.
+- The folder-rename section in `docs/upgrading.md` was a numbered step in a numbered list
+  of upgrades, which is why `(optional)` in its title did not survive contact with a
+  reader. It is no longer numbered and now says there is nothing to do.
+- `VAULT_JROC` is a **better** name than `vault_human`, and the docs now say so: it says
+  whose vault it is, which is the one thing a personal vault should say and the one thing a
+  generic label cannot. The repository needs generic words because it explains both sides
+  to a stranger. Nobody is a stranger to their own vault.
+
 ### Lifecycle and promotion are two axes now, not one
 
 `promoted` was the last state after `durable`, which meant promotion *replaced* where a
