@@ -40,6 +40,16 @@ BeforeAll {
             -WarningAction SilentlyContinue 3>$null | Out-Null
     }
 
+    # Taking everything after a heading is not a section: it runs to the end of the log and
+    # swallows every heading below it, so a name appearing legitimately further down reads
+    # as a match here. That is a false pass while a section happens to be last and a false
+    # failure the moment one is added after it - which is what the promotion sections did.
+    function global:Get-LogSection([string]$log, [string]$heading) {
+        $parts = ($log -split ([regex]::Escape('## ' + $heading)))
+        if ($parts.Count -lt 2) { return '' }
+        return ($parts[1] -split '(?m)^## ')[0]
+    }
+
     function global:Get-SyncLog($machine, [string]$vault) {
         $p = Join-Path $vault ('sync\sync-log-' + $machine.Key + '.md')
         if (-not (Test-Path -LiteralPath $p)) { return '' }
@@ -47,7 +57,10 @@ BeforeAll {
     }
 
     function global:New-Memory([string]$dir, [string]$name, [string]$body,
-            [string]$status = 'active', [string]$evidence = '[]') {
+            [string]$status = 'active', [string]$evidence = '[]', [string]$promotedTo = '') {
+        # Absence is the whole meaning of "not promoted", so the line is emitted only when
+        # there is a destination. Writing an empty promotedTo would be a different claim.
+        $promotionLine = $(if ($promotedTo) { "`n  promotedTo: $promotedTo" } else { '' })
         $text = @"
 ---
 name: $name
@@ -57,7 +70,7 @@ metadata:
   type: reference
   status: $status
   agent: test
-  evidence: $evidence
+  evidence: $evidence$promotionLine
   modified: 2026-01-20T14:30:00.000Z
 ---
 
@@ -294,7 +307,7 @@ Describe 'Report mode writes nothing' {
 
 Describe 'Counting the conventions the docs insist on' {
     It 'names a memory claiming verified with no evidence' {
-        # docs/memory.md and spec.md section 5: promotion to verified requires named
+        # docs/memory.md and spec.md section 5: reaching verified requires named
         # evidence, and inference is not evidence. Nothing counted it, so the rule that
         # decides whether a status means anything was the one rule with no counter.
         $w = Register-Workspace (New-Workspace)
@@ -304,12 +317,12 @@ Describe 'Counting the conventions the docs insist on' {
 
         Invoke-Sync $w.A $w.Vault 'Initialize'
 
-        # Assert against the section, not the whole log: a name can legitimately appear in
+        # Assert against one section, not the whole log: a name can legitimately appear in
         # another section for another reason, and a whole-log negative would then be
         # testing the log's layout rather than the counter's judgement.
         $log = Get-SyncLog $w.A $w.Vault
         $log | Should -Match 'unevidenced=1'
-        $section = ($log -split '## Claimed verified without evidence')[1]
+        $section = Get-LogSection $log 'Claimed verified without evidence'
         $section | Should -Match 'unbacked-one'
         $section | Should -Not -Match 'honest-one'
         $section | Should -Not -Match 'plain-one'
@@ -322,6 +335,63 @@ Describe 'Counting the conventions the docs insist on' {
         New-Memory $w.A.MemoryDir 'plain-one' 'body' 'active' '[]'
         Invoke-Sync $w.A $w.Vault 'Initialize'
         Get-SyncLog $w.A $w.Vault | Should -Match 'unevidenced=0'
+    }
+
+    It 'counts a promotion without disturbing the memory lifecycle status' {
+        # The finding this test exists for: promotion used to be a status value, so a
+        # durable memory accepted into the human vault stopped being able to say it was
+        # durable. Both axes must survive on the same file.
+        $w = Register-Workspace (New-Workspace)
+        New-Memory $w.A.MemoryDir 'crossed-over' 'body' 'durable' "['docs/spec.md']" '02_Dev/note.md'
+        New-Memory $w.A.MemoryDir 'stayed-put' 'body' 'durable' "['docs/spec.md']"
+
+        Invoke-Sync $w.A $w.Vault 'Initialize'
+
+        $log = Get-SyncLog $w.A $w.Vault
+        $log | Should -Match 'Promoted: 1 memory'
+        # Still counted as durable. If promotion had replaced the status this would be 1.
+        $log | Should -Match 'durable=2'
+        $section = Get-LogSection $log 'Promoted into the human vault'
+        $section | Should -Match 'crossed-over'
+        $section | Should -Not -Match 'stayed-put'
+    }
+
+    It 'requires evidence for a promotion the same way it does for a status' {
+        # docs/candidates.md demands a verified finding before anything is promoted, so a
+        # promotion claim with an empty evidence list is the same broken claim as a bare
+        # verified. active alone would not be counted - the promotion is what pulls it in.
+        # Fixture names must not be substrings of one another: -Not -Match is a substring
+        # test, so naming these 'unbacked-promotion' and 'backed-promotion' made the
+        # negative assertion impossible to pass no matter what the script did.
+        $w = Register-Workspace (New-Workspace)
+        New-Memory $w.A.MemoryDir 'bare-promotion' 'body' 'active' '[]' '02_Dev/note.md'
+        New-Memory $w.A.MemoryDir 'evidenced-promotion' 'body' 'active' "['docs/spec.md']" '02_Dev/other.md'
+
+        Invoke-Sync $w.A $w.Vault 'Initialize'
+
+        $log = Get-SyncLog $w.A $w.Vault
+        $log | Should -Match 'unevidenced=1'
+        $section = Get-LogSection $log 'Claimed verified without evidence'
+        $section | Should -Match 'bare-promotion'
+        $section | Should -Not -Match 'evidenced-promotion'
+    }
+
+    It 'keeps evidence-checking the legacy promoted status and lists it for migration' {
+        # Dropping 'promoted' from the evidence check when it left the enum would have
+        # exempted exactly the memories the rule was written for. Silent exemption is the
+        # failure mode this asserts against - the listing alone is not enough.
+        $w = Register-Workspace (New-Workspace)
+        New-Memory $w.A.MemoryDir 'old-spelling' 'body' 'promoted' '[]'
+
+        Invoke-Sync $w.A $w.Vault 'Initialize'
+
+        $log = Get-SyncLog $w.A $w.Vault
+        $log | Should -Match 'Legacy promoted status: 1 memory'
+        $log | Should -Match 'unevidenced=1'
+        (Get-LogSection $log 'Legacy promoted status') | Should -Match 'old-spelling'
+        (Get-LogSection $log 'Claimed verified without evidence') | Should -Match 'old-spelling'
+        # It has no promotedTo, so it is not a promotion yet - that is the migration.
+        $log | Should -Match 'Promoted: 0 memory'
     }
 
     It 'names a handoff that has been sitting too long' {
@@ -343,7 +413,7 @@ Describe 'Counting the conventions the docs insist on' {
         # The question here is which one the STALE section names, so read that section.
         $log = Get-SyncLog $w.A $w.Vault
         $log | Should -Match 'Handoffs older than 14 days: 1'
-        $section = ($log -split '## Handoffs left in place')[1]
+        $section = Get-LogSection $log 'Handoffs left in place'
         $section | Should -Match 'handoff-machine-b-old'
         $section | Should -Not -Match 'handoff-machine-b-new'
     }
@@ -365,7 +435,7 @@ Describe 'Counting the conventions the docs insist on' {
 
         $log = Get-SyncLog $w.A $w.Vault
         $log | Should -Match 'Candidates waiting over 14 days: 1'
-        $section = ($log -split '## Candidates waiting for a decision')[1]
+        $section = Get-LogSection $log 'Candidates waiting for a decision'
         $section | Should -Match 'promote-me'
         $section | Should -Not -Match 'just-arrived'
     }

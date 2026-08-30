@@ -41,7 +41,7 @@ it does not corrupt what 1 and 3 would need. Say so in its documentation.
 |
 +-- memory/
 |   +-- <runtime>-handoff/      mirror of that runtime's local memory. Machine-written
-|   +-- shared/                 durable memory, promoted deliberately
+|   +-- shared/                 durable memory, moved here deliberately
 |   +-- project/                per-project reusable memory
 |   +-- candidate/              undecided
 |   +-- archive/                low use, kept
@@ -171,9 +171,10 @@ description: <one line, used to judge relevance during recall>
 metadata:
   node_type: memory
   type: project | feedback | reference | user
-  status: capture | candidate | active | verified | durable | promoted | archived
+  status: capture | candidate | active | verified | durable | archived
   agent: <runtime id>
   evidence: []
+  promotedTo: <path in the human vault>    # optional; absent means not promoted
   modified: <ISO 8601>
 ---
 ```
@@ -187,18 +188,45 @@ every writer leaving unknown keys alone.
 
 ### Lifecycle
 
+How much this memory is worth to the agent that holds it:
+
 ```
-capture -> candidate -> active -> verified -> durable -> promoted
-                                     |
-                                 archived
+capture -> candidate -> active -> verified -> durable
+                            |
+                        archived
 ```
 
 | Rule | |
 |---|---|
 | `verified` requires evidence | A path, commit, test output, or incident. Inference is not evidence |
-| `promoted` is set by a person | Never by an agent |
 | Nothing is auto-deleted | `archived` means kept |
 | Every run counts statuses | And lists entries missing one. Without the count the field dies |
+
+### Promotion
+
+Whether it has crossed into human knowledge. **This is a second axis, not the end of the
+first one** — a memory is promoted *and* still sits somewhere in its own lifecycle.
+
+```
+memory -> candidates/ -> a person approves -> human vault -> promotedTo = <path>
+```
+
+| Rule | |
+|---|---|
+| `promotedTo` is set by a person | Never by an agent. It names a destination only a person knows |
+| Absent means not promoted | There is no "unpromoted" value to write |
+| `promotedTo` requires evidence | Promotion criteria already demand a verified finding |
+| Every run counts promotions | Same reason as statuses |
+
+Modelling promotion as a status was wrong in a way worth recording: it made promotion
+*replace* a memory's lifecycle position, so a durable memory that reached the human vault
+stopped being able to say it was durable. The two questions are independent, and one field
+cannot answer both.
+
+**`status: promoted` is legacy.** An implementation reading it must keep applying the
+evidence rule to it — dropping the check when the value left the enum would exempt exactly
+the memories the rule was written for — and should report it as needing migration. Nothing
+may rewrite it automatically: the destination path is not derivable.
 
 ### Reconciliation
 
@@ -272,6 +300,8 @@ Skills synced: 14 skill(s) / 14 file(s)
 Memory: pushed 3 / pulled 0 / normalized 0 / conflicts 0
 Conflicts: 0
 Lifecycle: active=80 verified=6 / no-status=0
+Promoted: 3 memory(ies) with a human-vault destination
+Legacy promoted status: 0 memory(ies) to migrate
 ```
 
 **Every count names its unit.** A number labelled ambiguously gets read as the wrong

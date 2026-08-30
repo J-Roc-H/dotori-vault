@@ -26,7 +26,8 @@ you — including things not yet verified. The human vault records what is settl
 them apart is what lets you trust one of them.
 
 **Promotion is one-way and human-approved.** Agents never write into the human vault
-directly, and never mark something promoted on their own.
+directly, and never set a memory's `promotedTo` on their own. That field records where a
+finding landed here, and only a person knows that.
 
 **No credentials, session logs, caches, or runtime state in either vault.** Those live
 outside both, next to the git directory.

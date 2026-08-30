@@ -922,26 +922,44 @@ if ($hasCodex) { Copy-Tree $memory (Join-Path $CodexHome 'memories\claude-handof
 
 # Lifecycle drift. The status field is a convention the AIs follow, not something the
 # harness enforces, so a session that rewrites a memory can silently drop it. Reporting
-# the count each sync is what keeps the seven states from decaying into dead metadata.
+# the count each sync is what keeps the six states from decaying into dead metadata.
 $memoryRootShared = Join-Path $shared 'memory'
 $statusCounts = @{}
 $missingStatus = @()
-# docs/memory.md and docs/spec.md section 5 both say promotion to verified requires named
+# docs/memory.md and docs/spec.md section 5 both say reaching verified requires named
 # evidence, and that inference is not evidence. Nothing checked it, so a memory could claim
 # verified with an empty evidence list forever - the one rule in this system that decides
 # whether a status means anything, and the only one with no counter. By this project's own
 # test (docs/evolution.md: a convention nobody counts is already broken) it was broken.
 $unevidenced = @()
-$evidencedStates = @('verified', 'durable', 'promoted')
+$evidencedStates = @('verified', 'durable')
+# Promotion is a different axis from the lifecycle. A memory moves capture -> ... -> durable
+# on its own merits; crossing into the human vault is a separate event a person approves,
+# and it does not replace where the memory sits in its own lifecycle. So promotion is the
+# presence of a destination path, not a status value, and "durable and promoted" is now
+# something the schema can express.
+$promoted = @()
+# 'promoted' used to be a status. It is still evidence-checked below, because dropping it
+# from the check the moment it left the enum would silently exempt every memory already
+# carrying it - the same as deleting the rule for exactly the files it was written for.
+# Listed separately so the migration is visible rather than assumed.
+$legacyPromoted = @()
 if (Test-Path -LiteralPath $memoryRootShared) {
     Get-ChildItem -LiteralPath $memoryRootShared -File -Filter '*.md' -Recurse | ForEach-Object {
         if ($_.Name -like 'MEMORY-*.md' -or $_.Name -eq 'MEMORY.md' -or $_.Name -eq 'README.md') { return }
         $st = Get-FrontmatterField $_.FullName 'status'
+        $to = Get-FrontmatterField $_.FullName 'promotedTo'
         $rel = $_.FullName.Substring($memoryRootShared.Length).TrimStart('\')
-        if ($st -and $evidencedStates -contains $st.ToLower()) {
+        $isLegacy = ($st -and $st.ToLower() -eq 'promoted')
+        if ($to) { $promoted += ($rel + ' -> ' + $to) }
+        if ($isLegacy) { $legacyPromoted += $rel }
+        # Evidence is required by the status a memory claims, and independently by a claim
+        # of promotion: docs/candidates.md requires "Verified" before anything is promoted.
+        if (($st -and $evidencedStates -contains $st.ToLower()) -or $to -or $isLegacy) {
             # An empty YAML list is "evidence: []" - present as a field, empty as a claim.
             $ev = Get-FrontmatterField $_.FullName 'evidence'
-            if (-not $ev -or $ev -eq '[]') { $unevidenced += ($rel + ' (' + $st + ')') }
+            $why = $(if ($st) { $st } else { 'promotedTo' })
+            if (-not $ev -or $ev -eq '[]') { $unevidenced += ($rel + ' (' + $why + ')') }
         }
         if (-not $st) { $missingStatus += $rel }
         else {
@@ -1068,6 +1086,8 @@ $log = @("# AI shared sync log", "", (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), "
     "Invalid skill folders: $($invalidSkillFolders.Count)",
     "Mirror: $gitStatus",
     "Lifecycle: $lifecycleSummary",
+    "Promoted: $($promoted.Count) memory(ies) with a human-vault destination",
+    "Legacy promoted status: $($legacyPromoted.Count) memory(ies) to migrate",
     "Cloud conflict copies: $($cloudConflictCopies.Count)",
     "New handoff files: $($newHandoff.Count)",
     "Handoffs older than $StaleHandoffDays days: $($staleHandoff.Count)",
@@ -1088,6 +1108,20 @@ if ($unevidenced.Count) {
     $log += 'output, an incident - and record none. Add what you checked, or move them back'
     $log += 'to active. Inference is not evidence.'
     $log += ($unevidenced | ForEach-Object { '- ' + $_ })
+}
+if ($promoted.Count) {
+    $log += ''; $log += '## Promoted into the human vault'
+    $log += 'These carry a destination path a person recorded. Promotion is a separate axis'
+    $log += 'from the lifecycle status, so each of these still has one - see docs/memory.md.'
+    $log += ($promoted | ForEach-Object { '- ' + $_ })
+}
+if ($legacyPromoted.Count) {
+    $log += ''; $log += '## Legacy promoted status'
+    $log += 'These use status: promoted, which is no longer one of the lifecycle states.'
+    $log += 'Set the status the memory actually holds - usually durable - and record where'
+    $log += 'it went in promotedTo. Nothing here rewrites them for you: promotedTo names a'
+    $log += 'destination only a person knows. See docs/upgrading.md.'
+    $log += ($legacyPromoted | ForEach-Object { '- ' + $_ })
 }
 if ($candidatesWaiting.Count) {
     $log += ''; $log += '## Candidates waiting for a decision'
@@ -1151,6 +1185,7 @@ if (-not [String]::Equals($runningScript, $installedScript, [StringComparison]::
 # what gets echoed back into the conversation.
 $hasNews = ($conflicts.Count -gt 0) -or ($invalidSkillFolders.Count -gt 0) -or
     ($missingStatus.Count -gt 0) -or ($unevidenced.Count -gt 0) -or
+    ($legacyPromoted.Count -gt 0) -or
     ($staleHandoff.Count -gt 0) -or ($candidatesWaiting.Count -gt 0) -or
     ($memPushed -gt 0) -or ($memPulled -gt 0) -or
     ($sourceChanges -gt 0) -or ($gitStatus -ne 'no changes') -or ($newHandoff.Count -gt 0)
@@ -1189,6 +1224,8 @@ if ($hasNews) {
     Write-Host ('Mirror: ' + $gitStatus)
     Write-Host ('Memory without lifecycle status: ' + $missingStatus.Count)
     Write-Host ('Claimed verified without evidence: ' + $unevidenced.Count)
+    Write-Host ('Promoted into the human vault: ' + $promoted.Count)
+    Write-Host ('Legacy promoted status to migrate: ' + $legacyPromoted.Count)
     Write-Host ('Conflicts: ' + $conflicts.Count)
     Write-Host ('Invalid skill folders: ' + $invalidSkillFolders.Count)
     Write-Host ('Backups retained: ' + $KeepBackups)

@@ -7,6 +7,45 @@ history contains private material. What is preserved is the order and the reason
 
 First public extraction. Nothing has been released yet.
 
+### Lifecycle and promotion are two axes now, not one
+
+`promoted` was the last state after `durable`, which meant promotion *replaced* where a
+memory sat in its own lifecycle: a durable finding accepted into the human vault stopped
+being able to say it was durable. Two independent questions were sharing one field.
+
+- `status` now ends at `durable`, with `archived` off to the side. It answers only "how
+  much is this worth to the agent".
+- **`metadata.promotedTo`** holds the path in the human vault where a finding landed.
+  Absent means not promoted; there is no value to write for "no". A person sets it, and
+  `docs/candidates.md` had already been telling people to record that path — with nowhere
+  in the schema to put it. A convention with no place to live is the same defect class as
+  a convention with no counter.
+- Promotion is evidence-checked the way a status is, because the promotion criteria
+  already demand a verified finding.
+- Two counted lines in the log: `Promoted:` and `Legacy promoted status:`. Neither is
+  folded into `Lifecycle:` — putting them there would redraw the axis this change
+  separates.
+
+**`status: promoted` still works and is still evidence-checked.** Dropping the check when
+the value left the enum would have exempted exactly the memories the rule was written for.
+It is listed for migration instead, and **nothing rewrites it for you**: `promotedTo` names
+a destination in a human vault that no script can know.
+
+The word was overloaded in four places, which is how the modelling error survived:
+`docs/memory.md` used "Promotion to `verified`" for a lifecycle step thirty lines above
+using `promoted` for the human-vault crossing; `docs/sync.md` did the same; `docs/spec.md`
+used "promoted deliberately" for merely moving a file into `shared/`; and a test comment
+carried it too. All now say "reaching `verified`" or name the field.
+
+Worth noting that `vault_ai/skills/wrapup/SKILL.md` already listed the enum without
+`promoted`. The skill had the right model before the spec did.
+
+Adding a log section also exposed a latent fault in the tests that assert on them. They
+took everything after a heading and called it a section, which runs to the end of the log
+and swallows every heading below. That passes for as long as the section you are asserting
+on happens to be last, and fails the moment anything is added after it — a test that was
+green for the wrong reason. All seven call sites now cut at the next heading.
+
 ### The repository is now laid out as two vaults and a tool
 
 Reading the root, the author could not see the shape the project describes. `human-vault/`
