@@ -7,7 +7,8 @@ The README describes a first install. Until now nothing described a second one, 
 gap of the same kind as the others this project keeps finding: the documents covered the
 beginning and not the middle.
 
-Two things changed that touch an existing vault. Neither deletes anything.
+Three things changed that touch an existing vault. None of them deletes anything, and the
+third one is optional.
 
 ---
 
@@ -51,6 +52,65 @@ one, run `-Mode Initialize` again to put it back.
 
 ---
 
+## 3. The vault is now documented as one of two folders (optional)
+
+The layout this project documents is a workspace holding two vaults:
+
+```
+<workspace>/
++-- vault_ai/       <- the vault. -VaultRoot points here
++-- vault_human/
+```
+
+**Nothing in the code requires this.** The script has never known the human vault exists
+and still does not. `-VaultRoot` points at the AI vault, and it does not care what the
+folder is called or what sits beside it. This is a naming convention so that two people
+describing their setup mean the same thing, and adopting it is a decision you can decline
+at no cost.
+
+### If you do move, read this first
+
+**Renaming your vault folder breaks every session hook that points into it.** That is not
+a recoverable-by-syncing situation: the hook is what runs the sync, so a machine with a
+broken hook cannot receive the fix. It has to be repaired on that machine, by hand.
+
+So do it one machine at a time, and finish each before starting the next:
+
+1. **Write down what you have.** On the machine, from your clone:
+
+   ```powershell
+   .\tool\sync-ai-shared.ps1 -Mode Report -VaultRoot "<current vault>" -MirrorRoot "<mirror root>"
+   ```
+
+   It writes nothing. Note the settings files it lists and the hook line it prints — that
+   is what you are about to invalidate.
+
+2. **Let the sync service settle.** Move or rename the folder, then wait for your sync
+   client to finish. Renaming a synced folder can look to the service like deleting one
+   tree and creating another; starting the next step mid-upload gets you a partial vault.
+
+3. **Re-run `Initialize` on that machine**, pointed at the new path:
+
+   ```powershell
+   powershell -NoProfile -ExecutionPolicy Bypass -File "<new vault>\sync-ai-shared.ps1" `
+     -Mode Initialize -VaultRoot "<new vault>"
+   ```
+
+   This rewrites the hook. It is the only step that repairs it.
+
+4. **Delete the old hook entry** from each settings file the report named in step 1.
+   `Initialize` adds the new one; it does not remove the stale one, so leaving it there
+   means every session from now on starts by failing to run a script that is not there.
+
+5. **Confirm before moving on.** Start a session and check that `sync\sync-log-<machine>.md`
+   under the new path has a fresh timestamp. Only then do the next machine.
+
+Until every machine is done you are running a split setup — some machines on the old path,
+some on the new. That is survivable (they are different folders, so neither corrupts the
+other) but they will not see each other's memory, so keep the window short.
+
+---
+
 ## The upgrade, in order
 
 Do one machine completely, confirm it, then do the next.
@@ -58,14 +118,14 @@ Do one machine completely, confirm it, then do the next.
 **1. Look first.** From your clone, pointed at your real vault:
 
 ```powershell
-.\sync-ai-shared.ps1 -Mode Report -VaultRoot "<your vault>" -MirrorRoot "<your mirror root>"
+.\tool\sync-ai-shared.ps1 -Mode Report -VaultRoot "<your vault>" -MirrorRoot "<your mirror root>"
 ```
 
 This writes nothing. Check that it names the machine key you expect and the settings files
 you expect.
 
 **2. Keep a way back.** The vault's git history lives outside the vault and already has
-your current state; `.\brain-git.ps1 log --oneline` will show it. If you want belt and
+your current state; `.\tool\brain-git.ps1 log --oneline` will show it. If you want belt and
 braces, copy `sync\` and `memory\` somewhere outside the vault first.
 
 **3. Replace the two scripts in the vault** with the ones from this repository — the shim at
@@ -73,14 +133,14 @@ the vault root, the implementation in `scripts\`. Keep the shim's path exactly a
 every machine has that path baked into its session hook, and a machine whose hook is broken
 can never run the sync that would deliver the fix.
 
-**4. Copy `skills\wrapup\` into your vault's `skills\`** if you want the shipped finishing
+**4. Copy `vault_ai\skills\wrapup\` into your vault's `skills\`** if you want the shipped finishing
 routine. Skip it if you already have your own — it is generic on purpose and yours will be
 better for your work.
 
 **5. Run a sync.**
 
 ```powershell
-.\sync-ai-shared.ps1 -Mode Sync -VaultRoot "<your vault>" -MirrorRoot "<your mirror root>"
+.\tool\sync-ai-shared.ps1 -Mode Sync -VaultRoot "<your vault>" -MirrorRoot "<your mirror root>"
 ```
 
 **6. Read the log.** `sync\sync-log-<COMPUTER>.md`. Expect:
@@ -120,4 +180,4 @@ the counters working, not the upgrade failing.
 Put the previous scripts back and run a sync. Nothing was deleted: the old-key files are
 still there, the new-key files become the stale ones, and memory is untouched either way.
 The git mirror has every state in between if you want a specific one —
-`.\brain-git.ps1 log --oneline` then `checkout`.
+`.\tool\brain-git.ps1 log --oneline` then `checkout`.

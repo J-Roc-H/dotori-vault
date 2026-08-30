@@ -38,7 +38,7 @@ all rather than merely a smaller version of the alternatives:
 - **The layout is a contract, not an implementation detail.** [docs/spec.md](docs/spec.md)
   defines it precisely enough to write a second implementation that shares a vault with this
   one, with nine invariants and a conformance check that
-  [runs on every commit](tests/Conformance.Tests.ps1) rather than sitting in prose.
+  [runs on every commit](tool/tests/Conformance.Tests.ps1) rather than sitting in prose.
 
 **If you only read one document, read [docs/evolution.md](docs/evolution.md).** Every
 structure here replaced one that failed in a specific way, and the failures are the useful
@@ -61,9 +61,13 @@ Two things make that harder than it sounds:
 DOTORI keeps one source of truth and publishes it outward:
 
 ```
-                      shared vault (Markdown)
-                              |
-        +---------------------+---------------------+
+   <workspace>/                one folder your sync service carries between machines
+   |
+   +-- vault_human/            what you know. Nothing publishes out of here
+   |
+   +-- vault_ai/               what your agents know
+           |
+        +--+------------------+---------------------+
         |                     |                     |
      at work               at home              machine N
         |                     |                     |
@@ -150,7 +154,7 @@ upgrade — the steps below are for a first install.
    line it would add:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File "<repo>\sync-ai-shared.ps1" `
+powershell -NoProfile -ExecutionPolicy Bypass -File "<repo>\tool\sync-ai-shared.ps1" `
   -Mode Report -VaultRoot "D:\my-vault"
 ```
 
@@ -158,10 +162,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "<repo>\sync-ai-shared.ps1" 
    describe one thing and do another. A test lists the whole tree before and after to
    confirm it leaves nothing behind.
 
-2. Copy `sync-ai-shared.ps1` (the shim) and `scripts\sync-ai-shared.ps1` into your vault
-   root and `scripts\` respectively. Copy `skills\wrapup\` in too — it is the routine that
-   ends a session with something written down, and without it the counters below have
-   nothing to count.
+2. Copy `tool\sync-ai-shared.ps1` (the shim) and `tool\scripts\sync-ai-shared.ps1` into
+   your vault root and its `scripts\` respectively, then `vault_ai\skills\wrapup\` into
+   your vault's `skills\`. The last one is the routine that ends a session with something
+   written down, and without it the counters below have nothing to count.
 3. Run once to seed the folders and install the session hooks:
 
 ```powershell
@@ -178,7 +182,7 @@ run this again.
 
 **Read this before step 3.** `-Mode Initialize` writes session hooks into your agent
 runtimes' settings files. It is not a dry run. If you want to see what it would touch
-first, read the `Add-HookCommand` calls at the bottom of `scripts\sync-ai-shared.ps1`.
+first, read the `Add-HookCommand` calls at the bottom of `tool\scripts\sync-ai-shared.ps1`.
 
 Only `Initialize` writes them. `Sync` — the mode the hook itself runs — reads those files
 and leaves them alone. If a hook is ever removed, run `Initialize` again to put it back.
@@ -228,7 +232,7 @@ nothing to decide.
 
 | Document | What it covers |
 |---|---|
-| [skills/wrapup/](skills/wrapup/SKILL.md) | The finishing routine: what to write down before you stop |
+| [vault_ai/skills/wrapup/](vault_ai/skills/wrapup/SKILL.md) | The finishing routine: what to write down before you stop |
 | [docs/upgrading.md](docs/upgrading.md) | Already running it? The whole upgrade, and what the new counts will tell you |
 | [docs/quickstart.md](docs/quickstart.md) | Ten minutes on a scratch path: see it work without touching your setup |
 | [docs/spec.md](docs/spec.md) | The on-disk contract, for writing another implementation |
@@ -241,10 +245,10 @@ nothing to decide.
 | [docs/projects.md](docs/projects.md) | Project working context |
 | [docs/index.md](docs/index.md) | Reserved for a search index |
 | [docs/evolution.md](docs/evolution.md) | How this architecture arrived at its current shape |
-| [human-vault/](human-vault/README.md) | The human side: folder skeleton and templates |
-| [examples/sample-workspace/](examples/sample-workspace/README.md) | A miniature of both vaults, with invented content |
-| [brain-git.ps1](brain-git.ps1) | Reading and rolling back the vault's git history by hand |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | What this project takes, what it does not, and how fast to expect a reply |
+| [vault_human/](vault_human/README.md) | The human side: folder skeleton and templates |
+| [docs/examples/sample-workspace/](docs/examples/sample-workspace/README.md) | A miniature of both vaults, with invented content |
+| [tool/brain-git.ps1](tool/brain-git.ps1) | Reading and rolling back the vault's git history by hand |
+| [CONTRIBUTING.md](.github/CONTRIBUTING.md) | What this project takes, what it does not, and how fast to expect a reply |
 | [CHANGELOG.md](CHANGELOG.md) | What changed and why |
 
 If you only read one, read [docs/evolution.md](docs/evolution.md). The code is specific to
@@ -314,6 +318,19 @@ So the script here is the script the author runs. A vault holds content — skil
 memory — and that stays private; the code does not live there. If you find a bug, you are
 finding it in the same file its author runs.
 
+Which is why the repository is split the way it is:
+
+| | |
+|---|---|
+| `tool/` | Everything that executes. The shim, the implementation, the tests |
+| `vault_ai/` | Starting content for the agent vault. Right now that is the wrapup skill; `Initialize` creates the rest of the folders, because git does not track empty ones |
+| `vault_human/` | Starting skeleton and templates for the human vault |
+| `docs/` | The contract and the reasoning, including the sample workspace |
+
+**Three different roots, and confusing them costs you.** The repository root is what you
+are reading. The tool root is `tool/`. The vault root is on your own disk and is where the
+shim goes — every machine bakes *that* path into its session hook.
+
 ## Known limitations
 
 Stated up front, because finding these yourself is worse than being told.
@@ -336,7 +353,7 @@ note before you stop — `handoff/` for an instruction to the other machine, `pr
 state that spans sessions. Both are folders a person fills in. The sync will tell the other
 machine a new handoff exists; it will not invent one.
 
-The shipped [`skills/wrapup/`](skills/wrapup/SKILL.md) is that step: ask for it when you
+The shipped [`vault_ai/skills/wrapup/`](vault_ai/skills/wrapup/SKILL.md) is that step: ask for it when you
 finish, and it writes the memory, the project state, and the handoff if one is needed. It
 still has to be asked. A hook cannot do it — the session-end hook fires after every turn,
 which is the wrong granularity, and nothing here can summarise a conversation anyway.

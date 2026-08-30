@@ -15,7 +15,9 @@
 # but it does mean the steps as written no longer go untested.
 
 BeforeAll {
-    $global:RepoRoot = Split-Path -Parent $PSScriptRoot
+    # tool/ holds what executes; the repository root above it holds the vaults and docs.
+    $global:ToolRoot    = Split-Path -Parent $PSScriptRoot
+    $global:ProjectRoot = Split-Path -Parent $global:ToolRoot
 
     function global:New-FreshMachine {
         $root = Join-Path ([IO.Path]::GetTempPath()) ('dotori-install-' + [Guid]::NewGuid().ToString('N'))
@@ -42,11 +44,11 @@ BeforeAll {
     function global:Install-Documented($m, [string]$mode) {
         # README step 2: the shim goes to the vault root, the implementation to scripts\,
         # and skills\wrapup\ alongside them.
-        Copy-Item (Join-Path $global:RepoRoot 'sync-ai-shared.ps1') $m.Vault -Force
+        Copy-Item (Join-Path $global:ToolRoot 'sync-ai-shared.ps1') $m.Vault -Force
         New-Item -ItemType Directory -Path (Join-Path $m.Vault 'scripts') -Force | Out-Null
-        Copy-Item (Join-Path $global:RepoRoot 'scripts\sync-ai-shared.ps1') `
+        Copy-Item (Join-Path $global:ToolRoot 'scripts\sync-ai-shared.ps1') `
             (Join-Path $m.Vault 'scripts') -Force
-        Copy-Item (Join-Path $global:RepoRoot 'skills') $m.Vault -Recurse -Force
+        Copy-Item (Join-Path $global:ProjectRoot 'vault_ai\skills') $m.Vault -Recurse -Force
 
         # README step 3: run it through the shim, which is the path the instructions give
         # and the path every session hook will be baked with.
