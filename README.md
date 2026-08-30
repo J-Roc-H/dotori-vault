@@ -11,7 +11,8 @@ It does the same across agents, so what you taught one is not lost when you use 
 
 No database. No service. No daemon. No `.git` directory inside your cloud-synced vault.
 
-*(DOcuments TO Real Intelligence, if you were wondering.)*
+*A squirrel buries acorns in scattered places and comes back for them later.
+That is the whole idea. (도토리 — acorn.)*
 
 ## Read this before you read anything else
 
