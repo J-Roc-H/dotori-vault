@@ -40,6 +40,12 @@ carried it too. All now say "reaching `verified`" or name the field.
 Worth noting that `vault_ai/skills/wrapup/SKILL.md` already listed the enum without
 `promoted`. The skill had the right model before the spec did.
 
+Adding a log section also exposed a latent fault in the tests that assert on them. They
+took everything after a heading and called it a section, which runs to the end of the log
+and swallows every heading below. That passes for as long as the section you are asserting
+on happens to be last, and fails the moment anything is added after it — a test that was
+green for the wrong reason. All seven call sites now cut at the next heading.
+
 ### The repository is now laid out as two vaults and a tool
 
 Reading the root, the author could not see the shape the project describes. `human-vault/`

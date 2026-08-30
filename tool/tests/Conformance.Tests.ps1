@@ -40,6 +40,16 @@ BeforeAll {
             -WarningAction SilentlyContinue 3>$null | Out-Null
     }
 
+    # Taking everything after a heading is not a section: it runs to the end of the log and
+    # swallows every heading below it, so a name appearing legitimately further down reads
+    # as a match here. That is a false pass while a section happens to be last and a false
+    # failure the moment one is added after it - which is what the promotion sections did.
+    function global:Get-LogSection([string]$log, [string]$heading) {
+        $parts = ($log -split ([regex]::Escape('## ' + $heading)))
+        if ($parts.Count -lt 2) { return '' }
+        return ($parts[1] -split '(?m)^## ')[0]
+    }
+
     function global:Get-SyncLog($machine, [string]$vault) {
         $p = Join-Path $vault ('sync\sync-log-' + $machine.Key + '.md')
         if (-not (Test-Path -LiteralPath $p)) { return '' }
@@ -307,12 +317,12 @@ Describe 'Counting the conventions the docs insist on' {
 
         Invoke-Sync $w.A $w.Vault 'Initialize'
 
-        # Assert against the section, not the whole log: a name can legitimately appear in
+        # Assert against one section, not the whole log: a name can legitimately appear in
         # another section for another reason, and a whole-log negative would then be
         # testing the log's layout rather than the counter's judgement.
         $log = Get-SyncLog $w.A $w.Vault
         $log | Should -Match 'unevidenced=1'
-        $section = ($log -split '## Claimed verified without evidence')[1]
+        $section = Get-LogSection $log 'Claimed verified without evidence'
         $section | Should -Match 'unbacked-one'
         $section | Should -Not -Match 'honest-one'
         $section | Should -Not -Match 'plain-one'
@@ -341,7 +351,7 @@ Describe 'Counting the conventions the docs insist on' {
         $log | Should -Match 'Promoted: 1 memory'
         # Still counted as durable. If promotion had replaced the status this would be 1.
         $log | Should -Match 'durable=2'
-        $section = ($log -split '## Promoted into the human vault')[1]
+        $section = Get-LogSection $log 'Promoted into the human vault'
         $section | Should -Match 'crossed-over'
         $section | Should -Not -Match 'stayed-put'
     }
@@ -358,7 +368,7 @@ Describe 'Counting the conventions the docs insist on' {
 
         $log = Get-SyncLog $w.A $w.Vault
         $log | Should -Match 'unevidenced=1'
-        $section = ($log -split '## Claimed verified without evidence')[1]
+        $section = Get-LogSection $log 'Claimed verified without evidence'
         $section | Should -Match 'unbacked-promotion'
         $section | Should -Not -Match 'backed-promotion'
     }
@@ -375,8 +385,8 @@ Describe 'Counting the conventions the docs insist on' {
         $log = Get-SyncLog $w.A $w.Vault
         $log | Should -Match 'Legacy promoted status: 1 memory'
         $log | Should -Match 'unevidenced=1'
-        (($log -split '## Legacy promoted status')[1]) | Should -Match 'old-spelling'
-        (($log -split '## Claimed verified without evidence')[1]) | Should -Match 'old-spelling'
+        (Get-LogSection $log 'Legacy promoted status') | Should -Match 'old-spelling'
+        (Get-LogSection $log 'Claimed verified without evidence') | Should -Match 'old-spelling'
         # It has no promotedTo, so it is not a promotion yet - that is the migration.
         $log | Should -Match 'Promoted: 0 memory'
     }
@@ -400,7 +410,7 @@ Describe 'Counting the conventions the docs insist on' {
         # The question here is which one the STALE section names, so read that section.
         $log = Get-SyncLog $w.A $w.Vault
         $log | Should -Match 'Handoffs older than 14 days: 1'
-        $section = ($log -split '## Handoffs left in place')[1]
+        $section = Get-LogSection $log 'Handoffs left in place'
         $section | Should -Match 'handoff-machine-b-old'
         $section | Should -Not -Match 'handoff-machine-b-new'
     }
@@ -422,7 +432,7 @@ Describe 'Counting the conventions the docs insist on' {
 
         $log = Get-SyncLog $w.A $w.Vault
         $log | Should -Match 'Candidates waiting over 14 days: 1'
-        $section = ($log -split '## Candidates waiting for a decision')[1]
+        $section = Get-LogSection $log 'Candidates waiting for a decision'
         $section | Should -Match 'promote-me'
         $section | Should -Not -Match 'just-arrived'
     }
