@@ -32,9 +32,9 @@ all rather than merely a smaller version of the alternatives:
 
 - **Memory has a lifecycle with a gate on it.** Not "files copied both ways" —
   a status field where `verified` requires *named* evidence (a path, a commit, test output),
-  where inference is explicitly not evidence, and where only a person may mark something
-  promoted. Every run counts what claims a status it has not earned. See
-  [docs/memory.md](docs/memory.md).
+  and where inference is explicitly not evidence. Crossing into human knowledge is a second,
+  separate axis that only a person may set. Every run counts what claims either without
+  having earned it. See [docs/memory.md](docs/memory.md).
 - **The layout is a contract, not an implementation detail.** [docs/spec.md](docs/spec.md)
   defines it precisely enough to write a second implementation that shares a vault with this
   one, with nine invariants and a conformance check that
@@ -211,6 +211,7 @@ Skills synced: 14 skill(s) / 14 file(s)
 Memory: pushed 3 / pulled 0 / normalized 0 / conflicts 0
 Mirror: committed 4 path(s)
 Lifecycle: active=80 verified=6 / no-status=0
+Promoted: 3 memory(ies) with a human-vault destination
 Cloud conflict copies: 0
 ```
 
@@ -226,7 +227,9 @@ Open the listed paths, decide which side is right, resolve it explicitly. The to
 not choose for you. `normalized` counts the ones it resolved itself because there was
 nothing to decide.
 
-`no-status` counts memories missing their lifecycle field — see [docs/memory.md](docs/memory.md).
+`no-status` counts memories missing their lifecycle field. `Promoted` counts the ones a
+person has accepted into the human vault — a separate axis from the lifecycle, so a
+promoted memory still has a status. See [docs/memory.md](docs/memory.md).
 
 ## Documentation
 

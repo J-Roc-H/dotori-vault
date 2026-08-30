@@ -7,8 +7,8 @@ The README describes a first install. Until now nothing described a second one, 
 gap of the same kind as the others this project keeps finding: the documents covered the
 beginning and not the middle.
 
-Three things changed that touch an existing vault. None of them deletes anything, and the
-third one is optional.
+Four things changed that touch an existing vault. None of them deletes anything, none of
+them rewrites a memory, and the last one is optional.
 
 ---
 
@@ -52,7 +52,41 @@ one, run `-Mode Initialize` again to put it back.
 
 ---
 
-## 3. The vault is now documented as one of two folders (optional)
+## 3. `promoted` is no longer a lifecycle status
+
+It used to be the last state after `durable`. That made promotion *replace* where a memory
+sat in its own lifecycle: a durable finding accepted into the human vault stopped being
+able to say it was durable. Two independent questions were sharing one field.
+
+They are separate now:
+
+| Question | Field |
+|---|---|
+| How much is this worth to the agent? | `status` — ends at `durable`, with `archived` off to the side |
+| Has it crossed into human knowledge? | `promotedTo` — the path it landed at, or absent |
+
+**Nothing rewrites your memories.** `promotedTo` names a destination in your human vault,
+and no script can know where a given finding went. This is a migration you do by hand, and
+there is no deadline.
+
+**What the first run does.** It counts them and lists them under *Legacy promoted status*
+in the log, and keeps applying the evidence rule to them — a `status: promoted` memory with
+an empty `evidence` list is still reported. Dropping that check the moment the value left
+the enum would have exempted exactly the memories the rule exists for.
+
+**What to do with each one**, when you get to it:
+
+1. Set `status` to what the memory actually is — usually `durable`.
+2. Add `promotedTo: <path in your human vault>` with where the finding landed.
+3. If you cannot find where it landed, that is worth knowing on its own. Leave the status
+   as it is and deal with it when you next touch the file; nothing breaks meanwhile.
+
+The count going to zero is the signal you are done. Until then the log tells you how many
+are left, every run.
+
+---
+
+## 4. The vault is now documented as one of two folders (optional)
 
 The layout this project documents is a workspace holding two vaults:
 

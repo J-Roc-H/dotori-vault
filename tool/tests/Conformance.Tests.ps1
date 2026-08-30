@@ -47,7 +47,10 @@ BeforeAll {
     }
 
     function global:New-Memory([string]$dir, [string]$name, [string]$body,
-            [string]$status = 'active', [string]$evidence = '[]') {
+            [string]$status = 'active', [string]$evidence = '[]', [string]$promotedTo = '') {
+        # Absence is the whole meaning of "not promoted", so the line is emitted only when
+        # there is a destination. Writing an empty promotedTo would be a different claim.
+        $promotionLine = $(if ($promotedTo) { "`n  promotedTo: $promotedTo" } else { '' })
         $text = @"
 ---
 name: $name
@@ -57,7 +60,7 @@ metadata:
   type: reference
   status: $status
   agent: test
-  evidence: $evidence
+  evidence: $evidence$promotionLine
   modified: 2026-01-20T14:30:00.000Z
 ---
 
@@ -294,7 +297,7 @@ Describe 'Report mode writes nothing' {
 
 Describe 'Counting the conventions the docs insist on' {
     It 'names a memory claiming verified with no evidence' {
-        # docs/memory.md and spec.md section 5: promotion to verified requires named
+        # docs/memory.md and spec.md section 5: reaching verified requires named
         # evidence, and inference is not evidence. Nothing counted it, so the rule that
         # decides whether a status means anything was the one rule with no counter.
         $w = Register-Workspace (New-Workspace)
@@ -322,6 +325,60 @@ Describe 'Counting the conventions the docs insist on' {
         New-Memory $w.A.MemoryDir 'plain-one' 'body' 'active' '[]'
         Invoke-Sync $w.A $w.Vault 'Initialize'
         Get-SyncLog $w.A $w.Vault | Should -Match 'unevidenced=0'
+    }
+
+    It 'counts a promotion without disturbing the memory lifecycle status' {
+        # The finding this test exists for: promotion used to be a status value, so a
+        # durable memory accepted into the human vault stopped being able to say it was
+        # durable. Both axes must survive on the same file.
+        $w = Register-Workspace (New-Workspace)
+        New-Memory $w.A.MemoryDir 'crossed-over' 'body' 'durable' "['docs/spec.md']" '02_Dev/note.md'
+        New-Memory $w.A.MemoryDir 'stayed-put' 'body' 'durable' "['docs/spec.md']"
+
+        Invoke-Sync $w.A $w.Vault 'Initialize'
+
+        $log = Get-SyncLog $w.A $w.Vault
+        $log | Should -Match 'Promoted: 1 memory'
+        # Still counted as durable. If promotion had replaced the status this would be 1.
+        $log | Should -Match 'durable=2'
+        $section = ($log -split '## Promoted into the human vault')[1]
+        $section | Should -Match 'crossed-over'
+        $section | Should -Not -Match 'stayed-put'
+    }
+
+    It 'requires evidence for a promotion the same way it does for a status' {
+        # docs/candidates.md demands a verified finding before anything is promoted, so a
+        # promotion claim with an empty evidence list is the same broken claim as a bare
+        # verified. active alone would not be counted - the promotion is what pulls it in.
+        $w = Register-Workspace (New-Workspace)
+        New-Memory $w.A.MemoryDir 'unbacked-promotion' 'body' 'active' '[]' '02_Dev/note.md'
+        New-Memory $w.A.MemoryDir 'backed-promotion' 'body' 'active' "['docs/spec.md']" '02_Dev/other.md'
+
+        Invoke-Sync $w.A $w.Vault 'Initialize'
+
+        $log = Get-SyncLog $w.A $w.Vault
+        $log | Should -Match 'unevidenced=1'
+        $section = ($log -split '## Claimed verified without evidence')[1]
+        $section | Should -Match 'unbacked-promotion'
+        $section | Should -Not -Match 'backed-promotion'
+    }
+
+    It 'keeps evidence-checking the legacy promoted status and lists it for migration' {
+        # Dropping 'promoted' from the evidence check when it left the enum would have
+        # exempted exactly the memories the rule was written for. Silent exemption is the
+        # failure mode this asserts against - the listing alone is not enough.
+        $w = Register-Workspace (New-Workspace)
+        New-Memory $w.A.MemoryDir 'old-spelling' 'body' 'promoted' '[]'
+
+        Invoke-Sync $w.A $w.Vault 'Initialize'
+
+        $log = Get-SyncLog $w.A $w.Vault
+        $log | Should -Match 'Legacy promoted status: 1 memory'
+        $log | Should -Match 'unevidenced=1'
+        (($log -split '## Legacy promoted status')[1]) | Should -Match 'old-spelling'
+        (($log -split '## Claimed verified without evidence')[1]) | Should -Match 'old-spelling'
+        # It has no promotedTo, so it is not a promotion yet - that is the migration.
+        $log | Should -Match 'Promoted: 0 memory'
     }
 
     It 'names a handoff that has been sitting too long' {

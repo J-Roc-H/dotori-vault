@@ -86,6 +86,6 @@ exists because the schema is a convention, not something the agent runtime enfor
 without a drift counter, an unenforced convention quietly becomes dead metadata nobody
 updates.
 
-Promotion to `verified` requires recorded evidence: a file path, a commit, test output, an
+Reaching `verified` requires recorded evidence: a file path, a commit, test output, an
 incident. **Inference is not evidence.** If you cannot name what you checked, leave it at
 `active`.

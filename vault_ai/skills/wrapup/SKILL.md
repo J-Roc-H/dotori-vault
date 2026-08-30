@@ -96,6 +96,6 @@ pays to read the router.
 | | Why |
 |---|---|
 | Promote anything into your human knowledge base | A person approves that. See [docs/candidates.md](../../../docs/candidates.md) |
-| Set `status: promoted` | Same reason — never set by an agent |
+| Set `promotedTo` | Same reason — it records where a person filed the finding, and only they know that |
 | Delete a memory | Retiring one is deliberate; the sync restores anything deleted locally |
 | Run by itself | It fires when you ask. A session-end hook fires after every turn, which is the wrong granularity, and an unasked-for wrapup writes noise |

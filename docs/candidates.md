@@ -32,7 +32,12 @@ agent plumbing.
 **An agent finding something does not make it human knowledge.**
 
 Promotion is never automatic and is approved by a person. Once promoted, remove it from
-here, set the source memory's status to `promoted`, and record the destination path in it.
+here and set `promotedTo` on the source memory to the path it landed at in the human vault.
+
+**Leave the memory's `status` alone.** Promotion is a separate axis from the lifecycle —
+a durable memory that reaches the human vault is still durable. `promotedTo` is where the
+promotion is recorded; `status` keeps answering its own question. See
+[memory.md](memory.md).
 
 The reason for the approval gate is that a knowledge base is only useful if its owner
 trusts everything in it. One unreviewed entry does not just add noise — it makes every
