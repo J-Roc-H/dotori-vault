@@ -549,9 +549,21 @@ across several machines and several agent runtimes.
 The install above has been rehearsed end to end into an empty directory tree — every path
 redirected, nothing of the real setup touched — and that rehearsal found three faults that
 years of daily use never could, because each one only appears on a machine that does *not*
-already have a working setup. See the changelog. It has not been run on a genuinely fresh
-Windows install, so the remaining unknowns are environmental: execution policy, whether git
-is present, PowerShell version.
+already have a working setup. See the changelog.
+
+The three environmental unknowns that rehearsal used to leave open — execution policy,
+whether git is present, PowerShell version — are now created deliberately by
+[`tool/tests/FreshMachine.Tests.ps1`](tool/tests/FreshMachine.Tests.ps1): it strips git from
+`PATH` and checks the run still finishes and still publishes, sets the execution policy to
+`Restricted` and checks the documented command works while the same command without
+`-ExecutionPolicy Bypass` is refused, and asserts the suite is running on Windows PowerShell
+5.1 rather than assuming it.
+
+**Two things those tests cannot reach.** The runners have no agent runtime installed, so the
+path that writes a hook into a real `settings.json` is exercised against a fixture rather
+than the real thing. And no test can tell whether an instruction is merely confusing.
+[docs/fresh-machine-check.md](docs/fresh-machine-check.md) is how to close both in about
+twenty minutes on a genuinely clean Windows.
 
 **Mixed setups.** A work machine and a home machine are not always the same OS. The script
 is Windows-only; the vault is not. [docs/spec.md](docs/spec.md) defines the layout, hashing
