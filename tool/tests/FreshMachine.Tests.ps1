@@ -49,6 +49,19 @@ BeforeAll {
         }
     }
 
+    # Run powershell.exe as a child and hand back both streams as text plus a real exit
+    # code. See the note in the execution-policy test for why this cannot be the call
+    # operator with 2>&1.
+    function global:Invoke-Child([string[]]$argList, [string]$dir, [string]$tag) {
+        $out = Join-Path $dir "$tag-out.txt"
+        $err = Join-Path $dir "$tag-err.txt"
+        $p = Start-Process -FilePath 'powershell.exe' -ArgumentList $argList -NoNewWindow `
+            -Wait -PassThru -RedirectStandardOutput $out -RedirectStandardError $err
+        $text = ((Get-Content -LiteralPath $out -Raw -ErrorAction SilentlyContinue) + "`n" +
+                 (Get-Content -LiteralPath $err -Raw -ErrorAction SilentlyContinue))
+        return [pscustomobject]@{ ExitCode = $p.ExitCode; Text = $text }
+    }
+
     $global:FreshRoots = @()
     function global:Register-Fresh($m) { $global:FreshRoots += $m.Root; return $m }
 }
@@ -121,27 +134,30 @@ Describe 'A machine with a locked-down execution policy' {
         }
 
         try {
-            $common = @('-NoProfile', '-File', $shim, '-Mode', 'Report',
-                        '-VaultRoot', $m.Vault, '-MirrorRoot', $m.Mirror,
-                        '-ClaudeHome', $m.ClaudeHome, '-CodexHome', $m.CodexHome,
-                        '-AntigravityHome', $m.Antigrav, '-MachineKey', 'FRESH-ENV')
-
+            $q = { param([string]$v) '"' + $v + '"' }
+            $common = @('-NoProfile', '-File', (& $q $shim), '-Mode', 'Report',
+                        '-VaultRoot', (& $q $m.Vault), '-MirrorRoot', (& $q $m.Mirror),
+                        '-ClaudeHome', (& $q $m.ClaudeHome), '-CodexHome', (& $q $m.CodexHome),
+                        '-AntigravityHome', (& $q $m.Antigrav), '-MachineKey', 'FRESH-ENV')
             $documented = @('-ExecutionPolicy', 'Bypass') + $common
 
-            # The documented form. Report is used because it writes nothing at all.
-            # Asserted on output, not exit code: Report returns without running a native
-            # command, so $LASTEXITCODE can carry a stale value and "exit 0" would hold
-            # whether or not the script ever ran.
-            $withFlag = (& powershell.exe $documented 2>&1) -join "`n"
+            # Start-Process rather than the call operator with 2>&1. A refusal is the
+            # expected result of the second run, and merging stderr into the pipeline
+            # makes it an ErrorRecord - which Pester, running It blocks under
+            # ErrorActionPreference = Stop, raises as a terminating error. The assertion
+            # is then never reached and the harness reports a failure for the very
+            # behaviour the test exists to confirm. This also yields a real exit code.
+            $withFlag    = Invoke-Child $documented $m.Root 'with-flag'
+            $withoutFlag = Invoke-Child $common     $m.Root 'no-flag'
 
-            # The same command with the flag removed. Here the exit code is the signal -
-            # a Restricted machine refuses to load the file at all.
-            $withoutFlag = (& powershell.exe $common 2>&1) -join "`n"
-            $refusedCode = $LASTEXITCODE
+            # Positive case asserted on output, not exit status: Report returns without
+            # running a native command, so "exited 0" would hold whether or not the
+            # script ever did anything.
+            $withFlag.Text | Should -Match 'what Initialize would do on this machine'
 
-            $withFlag | Should -Match 'what Initialize would do on this machine'
-            $refusedCode | Should -Not -Be 0
-            $withoutFlag | Should -Not -Match 'what Initialize would do on this machine'
+            # Negative case: a Restricted machine refuses to load the file at all.
+            $withoutFlag.ExitCode | Should -Not -Be 0
+            $withoutFlag.Text | Should -Not -Match 'what Initialize would do on this machine'
         } finally {
             Set-ExecutionPolicy $original -Scope Process -Force -ErrorAction SilentlyContinue
         }
