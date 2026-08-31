@@ -7,6 +7,36 @@ history contains private material. What is preserved is the order and the reason
 
 First public extraction. Nothing has been released yet.
 
+### The fresh-machine unknowns are tested instead of listed
+
+`Scope` named three things a rehearsal could not cover — execution policy, whether git is
+present, PowerShell version — and left them as prose. All three are machine state, not
+human judgement, so a test can create each condition on purpose rather than wait to be
+lucky. `tool/tests/FreshMachine.Tests.ps1` does:
+
+- **git removed from `PATH`.** Every git call sits behind one `Get-Command` guard and
+  nothing had ever run with that guard failing, while the README promised "a missing or
+  failing git is logged and skipped". The test asserts `git` is genuinely unreachable
+  *before* asserting anything about the run — without that it would pass just as happily
+  with git still present, which is a check that cannot fail. A second test then confirms
+  `PATH` was restored, because the first one edits process state everything after it shares.
+- **Execution policy set to `Restricted`.** The documented invocation still works, and the
+  same command without `-ExecutionPolicy Bypass` is refused — which is what makes that flag
+  a requirement rather than a habit. If the policy cannot be set (group policy can pin it)
+  the test skips and says so rather than failing: a check that cannot run must not be
+  reported as a failure.
+- **Windows PowerShell 5.1 asserted.** CI used it because `shell: powershell` means Windows
+  PowerShell, but nothing said so, which left the project's central platform claim verified
+  by coincidence.
+
+**This does not close the external verification.** Two things remain, and `Scope` now says
+which: the runners have no agent runtime installed, so writing a hook into a real
+`settings.json` is exercised against a fixture; and no test can tell whether an instruction
+is merely confusing. `docs/fresh-machine-check.md` is new and covers both — Windows Sandbox
+gives a clean Windows with no git and a default execution policy, which is the definition of
+the machine this needed, and the expected output of each step is written from the strings
+the script actually prints.
+
 ### The first run now says what it did and what it did not
 
 Walking a new user through the whole story — two runtimes on one machine, then a second

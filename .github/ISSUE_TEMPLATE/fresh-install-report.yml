@@ -10,6 +10,9 @@ body:
         clean CI runner, but a test cannot tell whether an instruction was confusing, and
         the number of people who have followed these words on their own machine is very
         small. **A report saying nothing broke is worth just as much as one saying it did.**
+
+        If you have not started yet, `docs/fresh-machine-check.md` walks through doing this
+        in Windows Sandbox - a clean Windows that costs nothing to throw away.
   - type: dropdown
     id: outcome
     attributes:
