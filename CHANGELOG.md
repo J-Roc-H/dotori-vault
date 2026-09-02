@@ -7,6 +7,28 @@ history contains private material. What is preserved is the order and the reason
 
 First public extraction. Nothing has been released yet.
 
+### The clean-Windows page stops assuming Windows Sandbox will turn on
+
+The page said only that Sandbox "needs Windows Pro, Enterprise or Education". It also needs
+virtualization enabled in firmware, and when that is off the checkbox in *Turn Windows
+features on or off* is simply greyed out - which reads as an edition problem, on a machine
+that already has the edition. That is exactly how the first person to follow the page read
+it, and there was no second route offered.
+
+There is now: **a new local Windows account**, which gives the same empty profile and the
+same default execution policy, needs no virtualization, and - because a runtime installed
+there persists - is the only route that writes a hook into a **real** `settings.json`
+rather than a fixture. That is one of the two gaps `Scope` says tests cannot reach, and
+nothing else in the project reaches it either. What the account does not give is a machine
+without git; that condition is the one `tool/tests/FreshMachine.Tests.ps1` already creates
+on every commit, so the page says so instead of pretending the routes are equivalent.
+
+The account route ends with a check nothing else could perform: comparing the settings file
+against the backup the installer takes. Writing the hook round-trips somebody's live config
+through PowerShell 5.1's JSON serializer, which escapes non-ASCII, reformats, and truncates
+past its depth limit - harmless against the fixture CI uses, and unverified against a real
+file until now.
+
 ### The fresh-machine unknowns are tested instead of listed
 
 `Scope` named three things a rehearsal could not cover — execution policy, whether git is

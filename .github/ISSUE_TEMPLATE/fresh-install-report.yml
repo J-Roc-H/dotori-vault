@@ -11,8 +11,9 @@ body:
         the number of people who have followed these words on their own machine is very
         small. **A report saying nothing broke is worth just as much as one saying it did.**
 
-        If you have not started yet, `docs/fresh-machine-check.md` walks through doing this
-        in Windows Sandbox - a clean Windows that costs nothing to throw away.
+        If you have not started yet, `docs/fresh-machine-check.md` walks through doing
+        this in Windows Sandbox, or - if Sandbox will not turn on, which is common - in a
+        new local Windows account.
   - type: dropdown
     id: outcome
     attributes:
@@ -50,4 +51,5 @@ body:
         - label: "`-Mode Report` first"
         - label: "`-Mode Initialize`"
         - label: Second machine against the same vault
+        - label: "`-Mode Initialize` again after installing an agent runtime, so the hook went into a real `settings.json`"
         - label: Ran the shipped `wrapup` skill at least once
