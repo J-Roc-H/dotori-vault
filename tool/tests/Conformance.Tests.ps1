@@ -115,6 +115,169 @@ Describe 'Conformance: idempotence' {
     }
 }
 
+Describe 'Native memory reconciliation' {
+    It 'remembers an explicit primary project for later hook runs' {
+        $w = Register-Workspace (New-Workspace)
+        New-Memory $w.A.MemoryDir 'primary' 'selected'
+        $other = Join-Path $w.A.ClaudeHome 'projects\newer\memory'
+        New-Item -ItemType Directory -Path $other -Force | Out-Null
+        New-Memory $other 'secondary' 'newer'
+        & $global:RealScript -Mode Sync -VaultRoot $w.Vault -ClaudeHome $w.A.ClaudeHome `
+            -ClaudeRoot $w.A.ClaudeRoot -CodexHome $w.A.CodexHome -AntigravityHome $w.A.Antigrav `
+            -MirrorRoot $w.A.Mirror -MachineKey $w.A.Key -MemoryProject 'proj' -WarningAction SilentlyContinue | Out-Null
+        [IO.File]::ReadAllText((Join-Path $w.A.Mirror 'memory-project.txt')) | Should -Be 'proj'
+        Invoke-Sync $w.A $w.Vault
+        (Get-SyncLog $w.A $w.Vault) | Should -Match 'projects\\proj\\memory \(explicit -MemoryProject\)'
+    }
+
+    It 'does not persist a proposed primary project during Report' {
+        $w = Register-Workspace (New-Workspace)
+        & $global:RealScript -Mode Report -VaultRoot $w.Vault -ClaudeHome $w.A.ClaudeHome `
+            -ClaudeRoot $w.A.ClaudeRoot -CodexHome $w.A.CodexHome -AntigravityHome $w.A.Antigrav `
+            -MirrorRoot $w.A.Mirror -MachineKey $w.A.Key -MemoryProject 'proj' -WarningAction SilentlyContinue | Out-Null
+        (Join-Path $w.A.Mirror 'memory-project.txt') | Should -Not -Exist
+    }
+
+    It 'preserves recursive Codex memory and excludes received Claude data and git internals' {
+        $w = Register-Workspace (New-Workspace)
+        $native = Join-Path $w.A.CodexHome 'memories'
+        foreach ($sub in @('rollout_summaries', '.git', 'claude-handoff', 'claude-handoff-archive')) {
+            New-Item -ItemType Directory -Path (Join-Path $native $sub) -Force | Out-Null
+        }
+        [IO.File]::WriteAllText((Join-Path $native 'MEMORY.md'), 'native index')
+        [IO.File]::WriteAllText((Join-Path $native 'rollout_summaries\sample.md'), 'native evidence')
+        [IO.File]::WriteAllText((Join-Path $native '.git\private.md'), 'not memory')
+        [IO.File]::WriteAllText((Join-Path $native 'claude-handoff\received.md'), 'received')
+        [IO.File]::WriteAllText((Join-Path $native 'claude-handoff-archive\received.md'), 'received')
+        Invoke-Sync $w.A $w.Vault
+        $mirror = Join-Path $w.Vault ('memory\codex-handoff\' + $w.A.Key)
+        [IO.File]::ReadAllText((Join-Path $mirror 'MEMORY.md')) | Should -Be 'native index'
+        [IO.File]::ReadAllText((Join-Path $mirror 'rollout_summaries\sample.md')) | Should -Be 'native evidence'
+        (Join-Path $mirror '.git') | Should -Not -Exist
+        (Join-Path $mirror 'claude-handoff') | Should -Not -Exist
+        (Join-Path $mirror 'claude-handoff-archive') | Should -Not -Exist
+        (Get-SyncLog $w.A $w.Vault) | Should -Match 'no-status=0'
+        Invoke-Sync $w.B $w.Vault
+        (Join-Path $w.B.CodexHome 'memories\rollout_summaries\sample.md') | Should -Not -Exist
+    }
+
+    It 'restores a missing native file and propagates a one-sided edit with the explicit machine key' {
+        $w = Register-Workspace (New-Workspace)
+        $native = Join-Path $w.A.CodexHome 'memories'
+        New-Item -ItemType Directory -Path $native -Force | Out-Null
+        $local = Join-Path $native 'note.md'
+        [IO.File]::WriteAllText($local, 'first')
+        Invoke-Sync $w.A $w.Vault
+        $mirror = Join-Path $w.Vault ('memory\codex-handoff\' + $w.A.Key + '\note.md')
+        [IO.File]::WriteAllText($local, 'second')
+        Invoke-Sync $w.A $w.Vault
+        [IO.File]::ReadAllText($mirror) | Should -Be 'second'
+        Remove-Item -LiteralPath $local -Force
+        Invoke-Sync $w.A $w.Vault
+        [IO.File]::ReadAllText($local) | Should -Be 'second'
+        Invoke-Sync $w.A $w.Vault
+        (Get-SyncLog $w.A $w.Vault) | Should -Match 'Codex memory: pushed 0 / pulled 0 / normalized 0 / conflicts 0'
+    }
+
+    It 'keeps both native edits and the old baseline after repeated conflicting runs' {
+        $w = Register-Workspace (New-Workspace)
+        $native = Join-Path $w.A.CodexHome 'memories'
+        New-Item -ItemType Directory -Path $native -Force | Out-Null
+        $local = Join-Path $native 'note.md'
+        [IO.File]::WriteAllText($local, 'base')
+        Invoke-Sync $w.A $w.Vault
+        $relative = 'memory\codex-handoff\' + $w.A.Key + '\note.md'
+        $mirror = Join-Path $w.Vault $relative
+        $manifest = Join-Path $w.Vault ('sync\sync-manifest-' + $w.A.Key + '.json')
+        $before = ([IO.File]::ReadAllText($manifest) | ConvertFrom-Json).files | Where-Object relative -eq $relative
+        [IO.File]::WriteAllText($local, 'local edit')
+        [IO.File]::WriteAllText($mirror, 'shared edit')
+        1..2 | ForEach-Object { Invoke-Sync $w.A $w.Vault }
+        [IO.File]::ReadAllText($local) | Should -Be 'local edit'
+        [IO.File]::ReadAllText($mirror) | Should -Be 'shared edit'
+        (Get-SyncLog $w.A $w.Vault) | Should -Match 'Conflicts: 1'
+        $after = ([IO.File]::ReadAllText($manifest) | ConvertFrom-Json).files | Where-Object relative -eq $relative
+        $after.shared | Should -Be $before.shared
+        $after.codex | Should -Be $before.codex
+    }
+
+    It 'normalizes encoding-only native edits without hiding content edits' {
+        $w = Register-Workspace (New-Workspace)
+        $native = Join-Path $w.A.CodexHome 'memories'
+        New-Item -ItemType Directory -Path $native -Force | Out-Null
+        $local = Join-Path $native 'note.md'
+        [IO.File]::WriteAllText($local, "same`nbody", (New-Object Text.UTF8Encoding($false)))
+        Invoke-Sync $w.A $w.Vault
+        $mirror = Join-Path $w.Vault ('memory\codex-handoff\' + $w.A.Key + '\note.md')
+        [IO.File]::WriteAllText($local, "same`nnew", (New-Object Text.UTF8Encoding($false)))
+        [IO.File]::WriteAllText($mirror, "same`r`nnew", (New-Object Text.UTF8Encoding($true)))
+        Invoke-Sync $w.A $w.Vault
+        (Get-SyncLog $w.A $w.Vault) | Should -Match 'Codex memory: pushed 0 / pulled 0 / normalized 1 / conflicts 0'
+        (Get-FileHash -LiteralPath $local).Hash | Should -Be (Get-FileHash -LiteralPath $mirror).Hash
+    }
+
+    It 'archives non-primary Claude projects without flattening their indexes' {
+        $w = Register-Workspace (New-Workspace)
+        $other = Join-Path $w.A.ClaudeHome 'projects\other\memory'
+        New-Item -ItemType Directory -Path $other -Force | Out-Null
+        New-Memory $other 'same-name' 'other project'
+        New-Memory $w.A.MemoryDir 'same-name' 'primary project'
+        [IO.File]::WriteAllText((Join-Path $other 'MEMORY.md'), 'other index')
+        [IO.File]::WriteAllText((Join-Path $w.A.MemoryDir 'MEMORY.md'), 'primary index')
+        & $global:RealScript -Mode Sync -VaultRoot $w.Vault -ClaudeHome $w.A.ClaudeHome `
+            -ClaudeRoot $w.A.ClaudeRoot -CodexHome $w.A.CodexHome -AntigravityHome $w.A.Antigrav `
+            -MirrorRoot $w.A.Mirror -MachineKey $w.A.Key -MemoryProject 'proj' -WarningAction SilentlyContinue | Out-Null
+        $archive = Join-Path $w.Vault ('memory\claude-handoff-archive\' + $w.A.Key + '\other')
+        [IO.File]::ReadAllText((Join-Path $archive 'same-name.md')) | Should -Match 'other project'
+        [IO.File]::ReadAllText((Join-Path $archive 'MEMORY.md')) | Should -Be 'other index'
+        [IO.File]::ReadAllText((Join-Path $w.Vault 'memory\claude-handoff\same-name.md')) | Should -Match 'primary project'
+        (Join-Path $w.Vault 'memory\claude-handoff\MEMORY.md') | Should -Not -Exist
+        (Join-Path $w.Vault ('memory\claude-handoff\MEMORY-' + $w.A.Key + '.md')) | Should -Exist
+        (Join-Path $w.A.MemoryDir 'other.md') | Should -Not -Exist
+    }
+
+    It 'selects the newest memory file rather than the alphabetically first project' {
+        $w = Register-Workspace (New-Workspace)
+        New-Memory $w.A.MemoryDir 'older' 'old'
+        (Get-Item -LiteralPath (Join-Path $w.A.MemoryDir 'older.md')).LastWriteTime = [datetime]'2020-01-01'
+        $other = Join-Path $w.A.ClaudeHome 'projects\zz-newer\memory'
+        New-Item -ItemType Directory -Path $other -Force | Out-Null
+        New-Memory $other 'newer' 'new'
+        Invoke-Sync $w.A $w.Vault
+        (Get-SyncLog $w.A $w.Vault) | Should -Match 'zz-newer\\memory \(newest memory file\)'
+        (Join-Path $w.Vault 'memory\claude-handoff\newer.md') | Should -Exist
+    }
+}
+
+Describe 'Shared Codex rules publication' {
+    It 'backs up existing rules and publishes once from an explicit source' {
+        $w = Register-Workspace (New-Workspace)
+        $sourceDir = Join-Path $w.Vault 'source'
+        New-Item -ItemType Directory -Path $sourceDir -Force | Out-Null
+        $source = Join-Path $sourceDir 'codex-AGENTS.md'
+        $out = Join-Path $w.A.CodexHome 'AGENTS.md'
+        [IO.File]::WriteAllText($source, 'shared rules')
+        [IO.File]::WriteAllText($out, 'previous rules')
+        Invoke-Sync $w.A $w.Vault
+        [IO.File]::ReadAllText($out) | Should -Be 'shared rules'
+        $backups = @(Get-ChildItem -LiteralPath (Join-Path $w.A.Mirror 'backups') -Filter AGENTS.md -Recurse)
+        $backups.Count | Should -Be 1
+        [IO.File]::ReadAllText($backups[0].FullName) | Should -Be 'previous rules'
+        (Get-SyncLog $w.A $w.Vault) | Should -Match 'Codex AGENTS.md: republished'
+        $stamp = (Get-Item -LiteralPath $out).LastWriteTimeUtc
+        Invoke-Sync $w.A $w.Vault
+        (Get-Item -LiteralPath $out).LastWriteTimeUtc | Should -Be $stamp
+    }
+
+    It 'leaves existing Codex rules alone when there is no shared source' {
+        $w = Register-Workspace (New-Workspace)
+        $out = Join-Path $w.A.CodexHome 'AGENTS.md'
+        [IO.File]::WriteAllText($out, 'my rules')
+        Invoke-Sync $w.A $w.Vault
+        [IO.File]::ReadAllText($out) | Should -Be 'my rules'
+    }
+}
+
 Describe 'Conformance: propagation' {
     It 'carries a single-character edit from one machine to the other' {
         $w = Register-Workspace (New-Workspace)

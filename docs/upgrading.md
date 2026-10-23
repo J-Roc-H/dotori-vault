@@ -7,8 +7,29 @@ The README describes a first install. Until now nothing described a second one, 
 gap of the same kind as the others this project keeps finding: the documents covered the
 beginning and not the middle.
 
-Three things changed that touch an existing vault. None of them deletes anything and none
-of them rewrites a memory. A fourth section follows that is not an upgrade at all.
+The changes below preserve existing memory files. New native-memory namespaces are
+additive; no lifecycle or promotion field is migrated automatically.
+
+## Native-memory and rules additions
+
+Replace both tool files together, then run `Report` before the first `Sync`. The manifest
+stays at schema 2; old records remain usable. A genuinely divergent first pair is reported
+as a conflict rather than overwritten.
+
+Claude selection now uses the newest memory file rather than alphabetical project order.
+Review `Primary Claude memory` in `Report`; use `-MemoryProject <directory>` to retain a
+specific project. The local pin is remembered across hook runs. Other local Claude projects
+and the native Codex Markdown tree receive separate machine-scoped namespaces, as defined
+in [memory.md](memory.md). No other machine's native Codex index is imported.
+
+Rule publication is opt-in by the presence of `source/codex-AGENTS.md`. Existing Codex rules
+are backed up before replacement; delete that shared source if publication is not wanted.
+The tool does not ship the author's rules.
+
+Atomic document writes no longer fall back to in-place copying. An unsupported filesystem
+or locked target now fails visibly and preserves the original. Resolve the lock or use a
+filesystem supporting atomic replacement before retrying.
+
 
 ---
 

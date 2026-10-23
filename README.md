@@ -481,6 +481,19 @@ both sides to a stranger. **They are not names your own folders have to take** �
 are reading. The tool root is `tool/`. The vault root is on your own disk and is where the
 shim goes — every machine bakes *that* path into its session hook.
 
+## Memory stores and optional shared rules
+
+Claude's primary memory folder is selected by its newest Markdown file. Pin it with
+`-MemoryProject <project-directory>`; the choice is remembered under the local working area.
+Other Claude project folders are archived separately. Codex's native Markdown memory is
+mirrored recursively under `memory/codex-handoff/<machine>/`; received Claude copies and
+`.git` are excluded. Native Codex stores from different machines are never mixed or injected
+into each other. See [memory.md](docs/memory.md) for the exact scope and limitations.
+
+If you supply `source/codex-AGENTS.md`, sync publishes it to Codex's `AGENTS.md`, backing up
+existing rules before a change. Without that explicit source, existing rules are left alone.
+No personal rules, agents, memories or project registry are shipped in this repository.
+
 ## Known limitations
 
 Stated up front, because finding these yourself is worse than being told.
@@ -504,8 +517,9 @@ in the log is the standing answer.
 | Memory that was **written** during the session | Whatever you were part-way through |
 | | What you were about to do next |
 
-Memory sync reads one folder — the runtime's own `projects\<project>\memory`. A session
-transcript does not live there and is not copied. So closing the laptop mid-task on Friday
+Claude sync selects one primary `projects\<project>\memory` folder and archives the other
+local projects separately. Codex sync preserves its native Markdown tree under a machine
+namespace. Neither is a session transcript; conversations are not copied. So closing the laptop mid-task on Friday
 and opening the other machine on Saturday gives you the same environment and none of the
 thread: the agent knows how you work, not what you were doing.
 

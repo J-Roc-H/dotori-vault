@@ -15,6 +15,27 @@ The lifecycle field is authoritative. A folder is physical placement, not status
 | `candidate/` | Not yet known to be worth keeping | explicit move |
 | `archive/` | Low use, deliberately not deleted | explicit move |
 
+## Runtime stores
+
+- Claude's primary project is chosen by the newest memory file, or explicitly by
+  `-MemoryProject`. The directory name is stored in `MirrorRoot/memory-project.txt`; an
+  explicit empty value clears the pin. `Report` shows the selection without changing it.
+- The primary Claude store keeps the established cross-machine namespace. Each non-primary
+  local project is reconciled under `claude-handoff-archive/<machine>/<project>/`, including
+  its own index. These archives are not automatically loaded into the primary project.
+- Codex's recursive `memories/` Markdown tree is reconciled under
+  `codex-handoff/<machine>/`. `.git` and received `claude-handoff*` trees are excluded.
+  Only the current machine's subtree is used. This preserves native indexes without
+  pretending they are portable cross-machine instructions.
+- All stores use the same three-way comparison, normalization and conflict preservation.
+  A removed local file is restored; a missing native store is not created just to import it.
+- The lifecycle counters below cover schema-bearing shared memories. Native Codex exports
+  and preserved non-primary Claude archives are excluded from those counters.
+
+The public tool does not select shared records for session context, run a shared-memory
+writer, or provide the author's local Recall index. Those remain separate extensions;
+copying a Markdown record is not proof that a runtime consumed it.
+
 ## The constraint that catches everyone
 
 **Only the mirrored folder is auto-loaded.** An agent runtime loads memory from one flat
@@ -97,6 +118,10 @@ lists it under *Legacy promoted status* until you migrate it — see
 [upgrading.md](upgrading.md).
 
 ## Why any of this is counted
+
+The evidence counter accepts named references in inline or block lists. A verified
+shared-memory extension record may instead name a nonempty `source_ref`; this only checks
+that evidence is recorded, not that its contents are true. No record is rewritten.
 
 Every sync counts statuses, lists entries missing the field, lists entries claiming a
 status or a promotion with an empty `evidence` list, and counts promotions. The runtime

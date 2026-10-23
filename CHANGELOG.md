@@ -7,6 +7,22 @@ history contains private material. What is preserved is the order and the reason
 
 First public extraction. Nothing has been released yet.
 
+### Reconcile native memory stores and shared rules
+
+- Preserve Codex's native recursive Markdown store under the resolved machine key, without
+  re-exporting received Claude data or git internals. Other machines' native indexes stay isolated.
+- Select the primary Claude project by its newest memory file, or a remembered explicit pin;
+  retain other local projects in separate archives instead of silently ignoring them.
+- Publish Codex global rules only from an explicit shared source, with backup and idempotence.
+- Count named evidence in block lists as well as inline lists; retain legacy promotion warnings
+  and allow the existing verified shared-memory extension to reference its source.
+- Fail closed on an unavailable atomic document replacement. The previous copy fallback could
+  violate the original-file preservation guarantee.
+- Keep personal records, domain skills, registries and shared-context injection out of this
+  extraction. Tests cover native-store conflicts, baseline retention, normalization, isolation,
+  rule backup, evidence formats and locked targets. External fresh-machine verification remains open.
+
+
 ### The fresh-machine unknowns are tested instead of listed
 
 `Scope` named three things a rehearsal could not cover — execution policy, whether git is

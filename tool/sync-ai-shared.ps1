@@ -26,7 +26,8 @@ param(
     [string]$MirrorRoot,
     [string]$MachineKey,
     [int]$StaleHandoffDays,
-    [int]$KeepBackups
+    [int]$KeepBackups,
+    [string]$MemoryProject
 )
 
 $real = Join-Path $PSScriptRoot 'scripts\sync-ai-shared.ps1'
