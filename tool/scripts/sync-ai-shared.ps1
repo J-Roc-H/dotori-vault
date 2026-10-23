@@ -53,7 +53,9 @@ param(
     # How long a handoff may sit before the log starts naming it. A handoff is deleted
     # when its work is done, so an old one is either forgotten or finished-but-left.
     [int]$StaleHandoffDays = 14,
-    [int]$KeepBackups = 3
+    [int]$KeepBackups = 3,
+    # Pin the primary Claude project. Otherwise the newest memory FILE is selected.
+    [string]$MemoryProject = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -195,6 +197,95 @@ function Find-ConflictCopies([string]$root) {
     }
     return @($found)
 }
+function Get-MemoryRoot([string]$claudeHome, [string]$wanted) {
+    # Select by newest file, not by directory timestamp or alphabetic project name.
+    $projects = Join-Path $claudeHome 'projects'
+    $cands = @(Get-ChildItem -LiteralPath $projects -Directory -ErrorAction SilentlyContinue |
+        ForEach-Object { Join-Path $_.FullName 'memory' } | Where-Object { Test-Path -LiteralPath $_ })
+    if ($cands.Count -eq 0) { return [pscustomobject]@{ Root = $null; Skipped = @(); Reason = 'none found' } }
+    if ($wanted) {
+        $pick = @($cands | Where-Object { (Split-Path (Split-Path $_ -Parent) -Leaf) -eq $wanted })
+        if ($pick.Count -eq 0) { throw "MemoryProject not found under ${projects}: $wanted" }
+        $chosen = $pick[0]
+        $reason = 'explicit -MemoryProject'
+    } else {
+        $chosen = @($cands | Sort-Object | Sort-Object {
+            $f = @(Get-ChildItem -LiteralPath $_ -File -Filter '*.md' -ErrorAction SilentlyContinue |
+                Sort-Object LastWriteTime -Descending)
+            if ($f.Count) { $f[0].LastWriteTime } else { [datetime]::MinValue }
+        } -Descending)[0]
+        $reason = 'newest memory file'
+    }
+    return [pscustomobject]@{
+        Root = $chosen
+        Skipped = @($cands | Where-Object { $_ -ne $chosen })
+        Reason = $reason
+    }
+}
+function Get-CodexMemoryFiles([string]$root) {
+    if (-not (Test-Path -LiteralPath $root)) { return @() }
+    $prefix = $root.TrimEnd('\').Length
+    return @(Get-ChildItem -LiteralPath $root -File -Filter '*.md' -Recurse -ErrorAction SilentlyContinue |
+        Where-Object {
+            $rel = $_.FullName.Substring($prefix).TrimStart('\')
+            $parts = $rel -split '\\'
+            # Received Claude data and git internals must never be exported again.
+            $parts -notcontains '.git' -and $parts[0] -notlike 'claude-handoff*'
+        })
+}
+function Sync-MemoryTree([string]$localRoot, [string]$sharedRoot, [string]$relativeRoot,
+        [string]$runtime, [switch]$Recursive) {
+    $pushed = 0; $pulled = 0; $normalized = 0
+    $treeConflicts = @(); $treeRecords = @(); $pairs = [ordered]@{}
+    foreach ($root in @($localRoot, $sharedRoot)) {
+        $files = if ($Recursive) { @(Get-CodexMemoryFiles $root) } else {
+            @(Get-ChildItem -LiteralPath $root -File -Filter '*.md' -ErrorAction SilentlyContinue)
+        }
+        foreach ($file in $files) {
+            $rel = $file.FullName.Substring($root.TrimEnd('\').Length).TrimStart('\')
+            $pairs[$rel] = $true
+        }
+    }
+    foreach ($rel in @($pairs.Keys)) {
+        $localFile = Join-Path $localRoot $rel
+        $sharedFile = Join-Path $sharedRoot $rel
+        $manifestRel = Join-Path $relativeRoot $rel
+        $oldRec = $oldFiles[$manifestRel]
+        $oldShared = if ($oldRec) { $oldRec.shared } else { $null }
+        $oldLocal = if ($oldRec) { $oldRec.$runtime } else { $null }
+        $sh = Hash-File $sharedFile; $lh = Hash-File $localFile
+        $copyFrom = $null; $copyTo = $null
+        if ($sh -and $lh -and $sh -eq $lh) {
+            # Already in sync.
+        } elseif ($lh -and -not $sh) {
+            $copyFrom = $localFile; $copyTo = $sharedFile; $pushed++
+        } elseif ($sh -and -not $lh) {
+            $copyFrom = $sharedFile; $copyTo = $localFile; $pulled++
+        } elseif ($lh -ne $oldLocal -and $sh -eq $oldShared) {
+            $copyFrom = $localFile; $copyTo = $sharedFile; $pushed++
+        } elseif ($sh -ne $oldShared -and $lh -eq $oldLocal) {
+            $copyFrom = $sharedFile; $copyTo = $localFile; $pulled++
+        } elseif ((Hash-Norm $localFile) -eq (Hash-Norm $sharedFile)) {
+            $copyFrom = $localFile; $copyTo = $sharedFile; $normalized++
+        } else {
+            $treeConflicts += $manifestRel
+            # Retain the OLD baseline so a second run cannot silently accept either side.
+            if ($oldRec) { $treeRecords += $oldRec }
+            continue
+        }
+        if ($copyFrom) {
+            Ensure-Dir (Split-Path $copyTo)
+            Copy-Item -LiteralPath $copyFrom -Destination $copyTo -Force
+        }
+        $record = [ordered]@{relative = $manifestRel; shared = (Hash-File $sharedFile)}
+        $record[$runtime] = Hash-File $localFile
+        $treeRecords += [pscustomobject]$record
+    }
+    return [pscustomobject]@{
+        Pushed = $pushed; Pulled = $pulled; Normalized = $normalized
+        Conflicts = @($treeConflicts); Records = @($treeRecords)
+    }
+}
 function Ensure-Dir([string]$p) { New-Item -ItemType Directory -Path $p -Force | Out-Null }
 # One list, used both to recognise a path and to name examples in the messages. Keeping a
 # separate hardcoded list for the prose would let the two drift, and then a message would
@@ -272,43 +363,22 @@ function Backup-File([string]$p, [string]$root) {
         Copy-Item -LiteralPath $p -Destination $out -Force
     }
 }
-function Write-Utf8([string]$p, [string]$text) {
-    # Write to a temp file and RENAME it over the target. Writing in place would truncate
-    # the original to 0 bytes if a cloud client holds a lock mid-write (CORE_DEVREF #56).
-    #
-    # This used [IO.File]::Copy($tmp, $p, $true), which is not a rename: Copy opens the
-    # destination and rewrites it in place - the exact non-atomic write the temp file was
-    # there to avoid. docs/multi-machine.md promised a rename; only now is it one.
-    #
-    # [IO.File]::Replace is the atomic path on NTFS and needs the target to exist;
-    # Move covers the create case. Both require same-volume paths, which is why $tmp is
-    # built beside $p rather than in a temp directory. If the filesystem underneath
-    # supports neither (some cloud FUSE mounts), fall back to Copy but SAY SO - a silent
-    # downgrade to the unsafe write is how this stopped being true the first time.
+function Write-Utf8([string]$p, [string]$text, [switch]$Bom) {
     Ensure-Dir (Split-Path $p)
-    $enc = New-Object System.Text.UTF8Encoding
-    $tmp = $p + '.tmp-' + [Guid]::NewGuid().ToString('N').Substring(0, 8)
+    $enc = New-Object System.Text.UTF8Encoding([bool]$Bom)
+    $tmp = $p + '.tmp-' + [Guid]::NewGuid().ToString('N')
     try {
         [IO.File]::WriteAllText($tmp, $text, $enc)
         if (Test-Path -LiteralPath $p) {
-            try {
-                # [NullString]::Value, not $null: PowerShell converts $null to an empty
-                # string when binding a .NET [string] parameter, and Replace rejects that
-                # with "The path is not of a legal form" - so every overwrite silently took
-                # the non-atomic fallback below. The warning is what made that visible.
-                [IO.File]::Replace($tmp, $p, [NullString]::Value)
-            } catch {
-                Write-Warning ("Atomic replace unavailable for $p (" + $_.Exception.Message +
-                    "); falling back to a non-atomic copy.")
-                [IO.File]::Copy($tmp, $p, $true)
-            }
+            # PS 5.1 binds $null to an empty string. NullString is a null backup path.
+            [IO.File]::Replace($tmp, $p, [NullString]::Value)
         } else {
             [IO.File]::Move($tmp, $p)
         }
-        if (Test-Path -LiteralPath $tmp) { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }
-    } catch {
-        if (Test-Path -LiteralPath $tmp) { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }
-        throw
+    } finally {
+        if (Test-Path -LiteralPath $tmp) {
+            Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+        }
     }
 }
 function Get-FrontmatterField([string]$path, [string]$field) {
@@ -323,6 +393,43 @@ function Get-FrontmatterField([string]$path, [string]$field) {
     $value = $m.Groups[1].Value.Trim().Trim('"', "'")
     if (-not $value) { return $null }
     return $value
+}
+function Test-MemoryEvidence([string]$path) {
+    $raw = [IO.File]::ReadAllText($path, [Text.Encoding]::UTF8)
+    $fm = [regex]::Match($raw, '(?s)\A\uFEFF?---\s*\r?\n(.*?)\r?\n---(?:\r?\n|$)')
+    if (-not $fm.Success) { return $false }
+    $block = [regex]::Match($fm.Groups[1].Value,
+        '(?m)^(?<indent>[ \t]*)evidence:[ \t]*(?<value>[^\r\n]*)(?<rest>(?:\r?\n[ \t]+[^\r\n]*)*)')
+    if ($block.Success) {
+        $value = ($block.Groups['value'].Value -replace '\s+#.*$', '').Trim()
+        if ($value -match '^\[.*\]$') {
+            $items = $value.Trim('[', ']') -split ','
+            foreach ($item in $items) {
+                $named = $item.Trim().Trim([char]34, [char]39)
+                if ($named -and $named -notmatch '^(null|~)$') { return $true }
+            }
+        } elseif (-not $value) {
+            $indent = $block.Groups['indent'].Value.Length
+            foreach ($line in ($block.Groups['rest'].Value -split '\r?\n')) {
+                if (-not $line.Trim() -or $line.TrimStart().StartsWith('#')) { continue }
+                if (($line.Length - $line.TrimStart().Length) -le $indent) { break }
+                if ($line -match '^\s+-\s+(.+)$') {
+                    $named = ($Matches[1] -replace '\s+#.*$', '').Trim().Trim([char]34, [char]39)
+                    # Mappings need a locator, not just a kind label.
+                    if ($named -notmatch '^[A-Za-z_]+:\s' -and $named -and $named -notmatch '^(null|~)$') {
+                        return $true
+                    }
+                }
+                if ($line -match '^\s+(?:-\s+)?locator:\s*(.+)$') {
+                    $named = ($Matches[1] -replace '\s+#.*$', '').Trim().Trim([char]34, [char]39)
+                    if ($named -and $named -notmatch '^(null|~)$') { return $true }
+                }
+            }
+        }
+    }
+    $verification = Get-FrontmatterField $path 'verification'
+    $sourceRef = Get-FrontmatterField $path 'source_ref'
+    return ($verification -eq 'verified' -and $sourceRef -and $sourceRef -notmatch '^(null|~)$')
 }
 function Validate-Skill([string]$p, [string]$folder) {
     if (-not (Test-Path -LiteralPath $p)) { return $false }
@@ -559,6 +666,15 @@ $hasCodex = Test-Path -LiteralPath $CodexHome
 if (-not $hasClaudeRoot) { Write-Warning "Claude project root not found, skipping its skill source: $ClaudeRoot" }
 if (-not $hasCodex) { Write-Warning "Codex home not found, skipping Codex publication: $CodexHome" }
 
+# The primary project choice is machine-local. A session hook need not repeat it.
+$projectState = Join-Path $MirrorRoot 'memory-project.txt'
+if (-not $PSBoundParameters.ContainsKey('MemoryProject') -and (Test-Path -LiteralPath $projectState)) {
+    $MemoryProject = ([IO.File]::ReadAllText($projectState, [Text.Encoding]::UTF8)).Trim()
+}
+$memSelection = Get-MemoryRoot $ClaudeHome $MemoryProject
+$memRoot = $memSelection.Root
+$memSkipped = @($memSelection.Skipped)
+
 if ($Mode -eq 'Report') {
     # Everything this prints is derived from the same variables the real run uses, so it
     # cannot drift from what actually happens by describing it separately. It writes
@@ -594,6 +710,11 @@ if ($Mode -eq 'Report') {
     Show-Target 'claude project root' $ClaudeRoot $hasClaudeRoot
     Show-Target 'codex home' $CodexHome $hasCodex
     Show-Target 'antigravity rules dir' $AntigravityHome (Test-Path -LiteralPath $AntigravityHome)
+    Write-Host ''
+
+    Write-Host ('Primary Claude memory: ' + $memRoot + ' (' + $memSelection.Reason + ')')
+    Write-Host ('Other Claude project archives: ' + $memSkipped.Count)
+    Write-Host ('Codex native mirror: memory\codex-handoff\' + $machine)
     Write-Host ''
 
     Write-Host 'Settings files it would EDIT' -ForegroundColor Yellow
@@ -633,6 +754,8 @@ if ($Mode -eq 'Report') {
     return
 }
 
+if ($PSBoundParameters.ContainsKey('MemoryProject')) { Write-Utf8 $projectState $MemoryProject }
+
 if ($Mode -eq 'Initialize' -and -not $syncService) {
     # Only at Initialize. Repeating this every session would make it the kind of check
     # that cries wolf, and one machine with two runtimes is a setup this tool explicitly
@@ -664,9 +787,7 @@ if ($Mode -eq 'Initialize') {
     Copy-Tree (Join-Path $ClaudeHome 'agents') $agents
     if ($hasClaudeRoot) { Copy-Tree (Join-Path $ClaudeRoot '.claude\skills') $skills }
     Copy-Tree (Join-Path $ClaudeHome 'skills') $skills
-    $memRoot = Get-ChildItem (Join-Path $ClaudeHome 'projects') -Directory -ErrorAction SilentlyContinue |
-        ForEach-Object { Join-Path $_.FullName 'memory' } | Where-Object { Test-Path $_ } | Select-Object -First 1
-    if ($memRoot) { Copy-Tree $memRoot $memory }
+    # Primary memory is reconciled below, with its index renamed per machine.
     if ($hasCodex) { Copy-Tree (Join-Path $CodexHome 'memories\claude-handoff') $memory }
     # CLAUDE.md / AGENTS.md are deliberately NOT copied here: a second durable copy of the
     # operating rules would compete with the shared source (design rule "no competing copies").
@@ -880,6 +1001,24 @@ if (Test-Path -LiteralPath $antigravitySource) {
     Write-Utf8 $userGemini $geminiText
 }
 
+# Publish only an explicitly supplied shared rule source; never invent a personal router.
+$codexRulesPublished = $false
+$codexRulesSource = Join-Path $shared 'source\codex-AGENTS.md'
+if ($hasCodex -and (Test-Path -LiteralPath $codexRulesSource)) {
+    $codexRulesOut = Join-Path $CodexHome 'AGENTS.md'
+    $rulesText = [IO.File]::ReadAllText($codexRulesSource, [Text.Encoding]::UTF8)
+    $currentRules = if (Test-Path -LiteralPath $codexRulesOut) {
+        [IO.File]::ReadAllText($codexRulesOut, [Text.Encoding]::UTF8)
+    } else { $null }
+    if ($currentRules -cne $rulesText) {
+        $rulesBackup = Join-Path $backupRoot (Get-Date -Format 'yyyyMMdd-HHmmss')
+        Ensure-Dir $rulesBackup
+        Backup-File $codexRulesOut $rulesBackup
+        Write-Utf8 $codexRulesOut $rulesText -Bom
+        $codexRulesPublished = $true
+    }
+}
+
 # Memory moves in both directions. The previous one-way force-copy meant whichever
 # machine synced last silently overwrote the other machine's memories, and gave a new
 # machine no way to receive anything. Same three-way comparison the agents/skills use.
@@ -890,8 +1029,7 @@ $memNormalized = 0
 $memConflicts = @()
 $pulledForIndex = @()
 
-$memRoot = Get-ChildItem (Join-Path $ClaudeHome 'projects') -Directory -ErrorAction SilentlyContinue |
-    ForEach-Object { Join-Path $_.FullName 'memory' } | Where-Object { Test-Path $_ } | Select-Object -First 1
+
 
 if ($memRoot) {
     Ensure-Dir $memory
@@ -1028,6 +1166,25 @@ if ($memRoot) {
     }
 }
 
+# Native stores have different layouts: keep each under this resolved machine key.
+$codexResult = [pscustomobject]@{Pushed=0; Pulled=0; Normalized=0; Conflicts=@(); Records=@()}
+$codexMemoryRoot = Join-Path $CodexHome 'memories'
+$codexMemoryRel = Join-Path 'memory\codex-handoff' $machine
+if ($hasCodex -and (Test-Path -LiteralPath $codexMemoryRoot)) {
+    $codexResult = Sync-MemoryTree $codexMemoryRoot (Join-Path $shared $codexMemoryRel) $codexMemoryRel 'codex' -Recursive
+    $memoryRecords += $codexResult.Records
+    $memConflicts += $codexResult.Conflicts
+}
+$archivePushed = 0; $archivePulled = 0; $archiveNormalized = 0
+foreach ($archiveRoot in $memSkipped) {
+    $project = Split-Path (Split-Path $archiveRoot -Parent) -Leaf
+    $archiveRel = Join-Path (Join-Path 'memory\claude-handoff-archive' $machine) $project
+    $result = Sync-MemoryTree $archiveRoot (Join-Path $shared $archiveRel) $archiveRel 'claude'
+    $memoryRecords += $result.Records; $memConflicts += $result.Conflicts
+    $archivePushed += $result.Pushed; $archivePulled += $result.Pulled
+    $archiveNormalized += $result.Normalized
+}
+
 $conflicts += $memConflicts
 $records = @($agentRecords + $skillRecords + $memoryRecords)
 if ($hasCodex) { Copy-Tree $memory (Join-Path $CodexHome 'memories\claude-handoff') }
@@ -1059,19 +1216,21 @@ $legacyPromoted = @()
 if (Test-Path -LiteralPath $memoryRootShared) {
     Get-ChildItem -LiteralPath $memoryRootShared -File -Filter '*.md' -Recurse | ForEach-Object {
         if ($_.Name -like 'MEMORY-*.md' -or $_.Name -eq 'MEMORY.md' -or $_.Name -eq 'README.md') { return }
-        $st = Get-FrontmatterField $_.FullName 'status'
-        $to = Get-FrontmatterField $_.FullName 'promotedTo'
         $rel = $_.FullName.Substring($memoryRootShared.Length).TrimStart('\')
+        # Native Codex exports and project archives retain their runtime schemas.
+        if ($rel -like 'codex-handoff\*' -or $rel -like 'claude-handoff-archive\*') { return }
+        $st = Get-FrontmatterField $_.FullName 'status'
+        $verification = Get-FrontmatterField $_.FullName 'verification'
+        $to = Get-FrontmatterField $_.FullName 'promotedTo'
         $isLegacy = ($st -and $st.ToLower() -eq 'promoted')
         if ($to) { $promoted += ($rel + ' -> ' + $to) }
         if ($isLegacy) { $legacyPromoted += $rel }
         # Evidence is required by the status a memory claims, and independently by a claim
         # of promotion: docs/candidates.md requires "Verified" before anything is promoted.
-        if (($st -and $evidencedStates -contains $st.ToLower()) -or $to -or $isLegacy) {
+        if (($st -and $evidencedStates -contains $st.ToLower()) -or $verification -eq 'verified' -or $to -or $isLegacy) {
             # An empty YAML list is "evidence: []" - present as a field, empty as a claim.
-            $ev = Get-FrontmatterField $_.FullName 'evidence'
             $why = $(if ($st) { $st } else { 'promotedTo' })
-            if (-not $ev -or $ev -eq '[]') { $unevidenced += ($rel + ' (' + $why + ')') }
+            if (-not (Test-MemoryEvidence $_.FullName)) { $unevidenced += ($rel + ' (' + $why + ')') }
         }
         if (-not $st) { $missingStatus += $rel }
         else {
@@ -1191,7 +1350,10 @@ $log = @("# AI shared sync log", "", (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), "
     # of this label summed agents and skills into one number and a spec was written against
     # the misreading (v1.1 section 0.2). Say which unit is which.
     "Skills synced: $skillFolderCount skill(s) / $($skillRecords.Count) file(s)",
-    "Memory source: $memRoot",
+    "Memory source: $memRoot ($($memSelection.Reason))",
+    "Claude memory archives: $($memSkipped.Count) project(s), pushed $archivePushed / pulled $archivePulled / normalized $archiveNormalized",
+    "Codex memory: pushed $($codexResult.Pushed) / pulled $($codexResult.Pulled) / normalized $($codexResult.Normalized) / conflicts $($codexResult.Conflicts.Count)",
+    "Codex AGENTS.md: $(if ($codexRulesPublished) { 'republished' } else { 'unchanged or no shared source' })",
     "Memory: pushed $memPushed / pulled $memPulled / normalized $memNormalized / conflicts $($memConflicts.Count)",
     "Machine: $machine",
     "Conflicts: $($conflicts.Count)",
@@ -1301,6 +1463,8 @@ $hasNews = ($conflicts.Count -gt 0) -or ($invalidSkillFolders.Count -gt 0) -or
     ($legacyPromoted.Count -gt 0) -or
     ($staleHandoff.Count -gt 0) -or ($candidatesWaiting.Count -gt 0) -or
     ($memPushed -gt 0) -or ($memPulled -gt 0) -or
+    ($codexResult.Pushed -gt 0) -or ($codexResult.Pulled -gt 0) -or ($codexResult.Normalized -gt 0) -or
+    ($archivePushed -gt 0) -or ($archivePulled -gt 0) -or ($archiveNormalized -gt 0) -or $codexRulesPublished -or
     ($sourceChanges -gt 0) -or ($gitStatus -ne 'no changes') -or ($newHandoff.Count -gt 0)
 
 # Rebuild the FTS5 search index only when something actually changed - it's a

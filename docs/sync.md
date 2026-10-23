@@ -73,6 +73,16 @@ script "does not exist" may mean it does not exist *on the machine that wrote th
 Anything living outside the shared vault is per-machine by definition, so scope the claim
 to the machine rather than deleting it.
 
+## Writes and native stores
+
+Logs, manifests and rule documents written by the tool use a same-directory temporary file
+and atomic replacement. If replacement is unavailable or the target is locked, the run
+fails with the original file intact; it does not downgrade to an in-place copy. This
+guarantee does not describe the existing byte-copy paths for mirrored memory and skills.
+
+The runtime-specific store boundaries are defined in [memory.md](memory.md). Their native
+memory transfers use the same comparison and retain the previous baseline on a conflict.
+
 ## Lifecycle
 
 Memories carry a lifecycle field. Every run counts them and lists any that are missing it:

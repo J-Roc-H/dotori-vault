@@ -40,7 +40,9 @@ it does not corrupt what 1 and 3 would need. Say so in its documentation.
 +-- source/                     per-runtime global rules files
 |
 +-- memory/
-|   +-- <runtime>-handoff/      mirror of that runtime's local memory. Machine-written
+|   +-- claude-handoff/         primary Claude memory, shared across machines
+|   +-- claude-handoff-archive/<machine>/<project>/  other local Claude stores
+|   +-- codex-handoff/<machine>/  recursive native Codex Markdown store
 |   +-- shared/                 durable memory, moved here deliberately
 |   +-- project/                per-project reusable memory
 |   +-- candidate/              undecided
@@ -167,6 +169,18 @@ must never treat a missing manifest as permission to publish over local state.
 ---
 
 ## 5. Memory
+
+### Runtime store extensions
+
+The primary Claude memory namespace retains the original contract. Non-primary project
+archives and native Codex stores use the machine-scoped paths in section 2. The namespace
+uses the resolved machine key, including an explicit override; another machine's native
+index must never be imported. The file key remains the full relative path and the runtime
+hash is `claude` or `codex`; this is an additive schema-2 extension.
+
+Codex's generated Markdown and archived Claude projects retain their own native schemas.
+They are preserved verbatim and excluded from the lifecycle counters below. Unknown
+metadata must still survive. Neither extension introduces automatic session injection.
 
 ### Frontmatter
 
