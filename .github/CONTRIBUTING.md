@@ -49,8 +49,10 @@ what broke — or that nothing did — is the single most useful thing anyone ca
 
 ## Bugs
 
-Include `sync\sync-log-<machine>.md`. Most reports are unanswerable without it, and the log
-is designed to make the diagnosis obvious.
+Include the relevant **redacted** lines from `sync\sync-log-<machine>.md`: warnings,
+errors, and the final counters. Most reports need those facts, but do not post vault
+contents, credentials, employer data, runtime settings, session transcripts, or a full
+unredacted log.
 
 ## Pull requests
 

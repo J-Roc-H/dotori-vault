@@ -13,6 +13,10 @@ body:
 
         If you have not started yet, `docs/fresh-machine-check.md` walks through doing this
         in Windows Sandbox - a clean Windows that costs nothing to throw away.
+
+        **Privacy:** do not paste vault contents, credentials, employer data, runtime
+        settings, session transcripts, or a full unredacted log. Redact paths and
+        identifiers; the final counters and relevant warnings/errors are enough.
   - type: dropdown
     id: outcome
     attributes:
@@ -26,8 +30,8 @@ body:
   - type: textarea
     id: log
     attributes:
-      label: The sync log
-      description: "`sync\\sync-log-<machine>.md` from your vault. Paste it whole - the counts are the diagnosis."
+      label: Redacted relevant sync-log lines
+      description: "Final counters and any relevant warnings/errors from `sync\\sync-log-<machine>.md`."
       render: text
   - type: textarea
     id: friction

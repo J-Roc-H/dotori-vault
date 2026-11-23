@@ -5,10 +5,9 @@ body:
   - type: textarea
     id: log
     attributes:
-      label: The sync log
-      description: "`sync\\sync-log-<machine>.md`. Most reports cannot be answered without it - the log is built to make the diagnosis obvious."
+      label: Redacted relevant sync-log lines
+      description: "Start with the relevant warnings, errors, and final counters from `sync\\sync-log-<machine>.md`. Do not paste vault contents, credentials, employer data, runtime settings, or an unredacted full log."
       render: text
-    validations: { required: true }
   - type: textarea
     id: expected
     attributes:
