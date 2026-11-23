@@ -1,609 +1,198 @@
-# DOTORI
+# DOTORI Vault
 
-### Teach one AI. Keep it across all your AIs.
+**A Windows workspace that keeps one Markdown-based AI setup across your machines
+without requiring a Git remote.**
 
-Claude에서 만든 규칙과 스킬을 Codex를 열어도 그대로 사용합니다.
-회사 PC에서 배운 작업 방식은 집 PC에서도 그대로 이어집니다.
+DOTORI gives Claude Code and Codex one source for skills and agent definitions, and
+publishes them to the formats each runtime expects. It also keeps the shared vault
+plain Markdown, keeps its local Git metadata *outside* the cloud-synced folder, and
+stops on a real memory conflict instead of silently picking a winner.
 
-**One AI workspace. Any runtime. Any machine.**
+No API. No database. No service. No daemon. No `.git` directory inside the synced vault.
 
-No API. No database. No service. No daemon.
-No `.git` directory inside your cloud-synced vault.
-Just one shared folder of Markdown.
+[Try the safe 10-minute demo](docs/quickstart.md) ·
+[Read the installation steps](#install-on-your-own-machine) ·
+[Report a try or install](https://github.com/J-Roc-H/dotori-vault/issues/new?template=try-dotori.yml)
 
-```
-                    ┌──────────────┐
-                    │    DOTORI    │
-                    │ shared state │
-                    └──────┬───────┘
-         ┌─────────────────┼─────────────────┐
-         ↓                 ↓                 ↓
-      Claude             Codex          Antigravity
-      rules              rules             rules
-      skills             skills            skills
-      agents             agents             n/a
-         │                 │                 │
-         └─────────────────┴─────────────────┘
-                           │
-                       same memory
-                           │
-                 ┌─────────┴─────────┐
-                 ↓                   ↓
-              Work PC             Home PC
-```
+> **Windows and PowerShell 5.1 are required for the shipped implementation.**
+> The vault format is documented separately, so another implementation can share it.
 
-**DOTORI gives multiple AI runtimes one shared working environment.**
-Rules, skills, agents and memory live once, then follow you across runtimes and machines.
+## Is DOTORI the right tool?
 
-`n/a` is not a gap to be filled later: Antigravity has no documented convention for agent
-definitions, and this publishes nothing to a path it has not verified. The log says `n/a`
-for the same reason the diagram does.
+Choose DOTORI when all of these describe your setup:
 
-*A squirrel buries acorns in scattered places and comes back for them later.
-That is the whole idea. (도토리 — acorn.)*
+- You use **Windows** and at least one of Claude Code or Codex.
+- You want one Markdown source for shared skills and agent definitions on more than one
+  runtime or machine.
+- Your machines already have an **allowed, synced folder** (for example OneDrive,
+  Dropbox, iCloud Drive, Google Drive, Syncthing, or another service that exposes a
+  folder on both devices).
+- You cannot, do not want to, or are not permitted to make a Git remote the path between
+  those machines.
+- You prefer conflicts to stop for a human decision over automatic merging or
+  last-writer-wins.
 
-## DOTORI is for you if...
+Choose [skillshare](https://github.com/runkids/skillshare) instead when you need broad
+cross-platform runtime support, team distribution through Git repositories, MCP/plugin
+management, a desktop interface, or its built-in skill audit. It supports far more agent
+tools than DOTORI does and is the better general-purpose choice.
 
-- [ ] **Claude와 Codex를 번갈아 쓴다** — you switch between agent runtimes
-- [ ] **AI마다 같은 규칙을 다시 넣는 게 귀찮다** — you re-teach every new agent the same rules
-- [ ] **회사와 집에서 같은 AI 환경을 유지하고 싶다** — you want one environment on both machines
+| Question | DOTORI | skillshare |
+|---|---|---|
+| Primary transport between machines | A folder you already sync | Git-managed source and pull/clone workflow |
+| Shipped platform | Windows PowerShell 5.1 | Windows, macOS, Linux |
+| Runtime coverage | Claude Code, Codex, selected Antigravity paths | Broad multi-tool coverage |
+| Shared source | Plain Markdown vault | Managed configuration/source directory |
+| Memory position | Conservative native-store reconciliation; real conflicts stop | Its README focuses on skills/resources rather than a DOTORI-style native-memory sync claim |
+| Best fit | A Windows personal setup with an approved synced folder and no required Git remote | Most multi-tool, team, or Git-based setups |
 
-## The moment it matters
+This is a difference in constraints, not a security workaround. If one machine belongs to
+an employer, both the synced folder and every file placed in it must comply with that
+organization's policy. DOTORI does not inspect, filter, or authorize content for you.
 
-**Before**
+## What it shares, and what it does not
 
-```
-   at work                        at home
-   ┌──────────────┐               ┌──────────────┐
-   │    Claude    │               │    Codex     │
-   │              │               │              │
-   │  rules       │               │  (nothing)   │
-   │  skills      │   ───── ✗ ──> │              │
-   │  agents      │               │  "so, let me │
-   │  memory      │               │   explain    │
-   │              │               │   again..."  │
-   └──────────────┘               └──────────────┘
-```
+~~~
+                     shared Markdown vault
+          agents  ·  skills  ·  explicit rule sources
+                              |
+              +---------------+----------------+
+              |                                |
+         Claude Code                         Codex
+     Markdown agents/skills          TOML agents/skills
+              |                                |
+              +---------- synced folder -------+
+                         work / home machines
+~~~
 
-**With DOTORI**
-
-```
-   at work                        at home
-   ┌──────────────┐               ┌──────────────┐
-   │    Claude    │               │    Codex     │
-   └──────┬───────┘               └──────▲───────┘
-          │                              │
-          │        ┌──────────────┐      │
-          └───────>│    DOTORI    │──────┘
-                   │              │
-                   │  rules       │
-                   │  skills      │
-                   │  agents      │
-                   │  memory      │
-                   └──────────────┘
-
-     "내가 쓰던 AI 작업환경" — the setup you already had, wherever you opened it
-```
-
-## You do not need two computers for this to be worth anything
-
-Most of the value shows up on one machine: two agent runtimes reading the same skills and
-the same agent definitions, so what you teach one is not lost when you open the other. That
-needs no cloud folder and no second computer, and it is the part you can try in ten minutes
-— below.
-
-The second machine adds memory that travels. It is the case this was built for, but it is
-not the entry price.
-
-## See it in 10 minutes
-
-On a scratch path you delete at the end. Nothing here touches your real vault, settings
-files or runtime folders — but that is because **every path is redirected**, not because
-there is a safe mode. Build the scratch tree first and reuse it in every command below:
-
-```powershell
-$demo = "$env:TEMP\dotori-demo"; $a = "$demo\machine-a"
-mkdir "$a\claude\agents", "$a\claude\skills", "$a\claude\projects\demo\memory", `
-      "$a\codex", "$a\antigravity", "$a\local", "$demo\vault" -Force | Out-Null
-$scratch = @{
-  VaultRoot  = "$demo\vault"; ClaudeHome      = "$a\claude"; ClaudeRoot = "$a\claude-root"
-  CodexHome  = "$a\codex";    AntigravityHome = "$a\antigravity"
-  MirrorRoot = "$a\local";    MachineKey      = 'DEMO-A'
-}
-```
-
-> **Pass `@scratch` to every command in this section.** `-Mode Initialize` with only
-> `-VaultRoot` redirected still writes session hooks into your **real** runtime settings
-> files — that is the ordinary install doing its job, aimed at the wrong place.
-
-**1. Look before anything runs.** This mode is read-only: it resolves every path, names
-the runtimes it found, and prints the exact hook line it *would* add.
-
-```powershell
-.\tool\sync-ai-shared.ps1 -Mode Report @scratch
-```
-
-**2. Put one agent in DOTORI** as ordinary Markdown — `demo-reviewer.md`, with a
-`description` and a `tools:` restriction in its frontmatter.
-
-**3. Run Initialize** against that same scratch tree:
-
-```powershell
-.\tool\sync-ai-shared.ps1 -Mode Initialize @scratch
-```
-
-**4. Open the Codex side.** The Markdown you wrote is now in the format that runtime
-expects — description and tool restriction intact:
-
-```toml
-name = "demo-reviewer"
-description = "Checks a draft against the project standards before it ships."
-tools = ["Read", "Glob"]
-developer_instructions = '''
-You verify. You do not implement.
-'''
-```
-
-**5. Add a second machine** against the same vault. The memory the first one wrote is
-already there, without either machine reading the other's sync state.
-
-**That's DOTORI.** That conversion in step 4 is the thing a file-sync tool cannot do for
-you, and every run leaves a log saying exactly what moved:
-
-```
-Agents synced: 5
-Runtimes: agent-a agents=5 skills=14 | agent-b agents=5 skills=14 | agent-c agents=n/a skills=14
-Skills synced: 14 skill(s) / 14 file(s)
-Memory: pushed 3 / pulled 0 / normalized 0 / conflicts 0
-```
-
-The full copy-pasteable walkthrough, including watching it refuse to merge a real
-conflict, is [docs/quickstart.md](docs/quickstart.md).
-
-> **Windows and PowerShell 5.1.** That is what its author runs, not a claim that it is
-> better there. The spec is the portable part; the script is one implementation of it.
-
-## When NOT to use DOTORI
-
-**If you can put a git remote between your machines, use something else.**
-[skillshare](https://github.com/runkids/skillshare) covers sixty-odd agent tools where this
-covers three, runs on macOS and Linux as well as Windows, syncs bidirectionally, and is
-maintained by people who are not one person with a day job. If your two machines can both
-reach the same repository, that is a better tool than this one and you should go and get it.
-
-DOTORI exists for the case where they cannot. On a work machine, pushing your setup to a
-personal remote may be against policy, technically blocked, or simply something you do not
-want to do. A folder your employer already syncs crosses that boundary where a remote will
-not, and everything here follows from that one constraint.
-
-## What is unusual about it
-
-Two things are unusual enough to name, since they are the reason to look at this at all
-rather than merely a smaller version of the alternatives:
-
-- **Memory has a lifecycle with a gate on it.** Not "files copied both ways" —
-  a status field where `verified` requires *named* evidence (a path, a commit, test output),
-  and where inference is explicitly not evidence. Crossing into human knowledge is a second,
-  separate axis that only a person may set. Every run counts what claims either without
-  having earned it. See [docs/memory.md](docs/memory.md).
-- **The layout is a contract, not an implementation detail.** [docs/spec.md](docs/spec.md)
-  defines it precisely enough to write a second implementation that shares a vault with this
-  one, with nine invariants and a conformance check that
-  [runs on every commit](tool/tests/Conformance.Tests.ps1) rather than sitting in prose.
-
-**If you only read one document, read [docs/evolution.md](docs/evolution.md).** Every
-structure here replaced one that failed in a specific way, and the failures are the useful
-part — most of them are not specific to this tool or this platform.
-
-## The problem it solves
-
-You tune an AI coding agent at work until it actually knows how you work. Then you get
-home, open the same agent on your own machine, and it knows none of it.
-
-Two machines you cannot merge: the one at work and the one at home. Same person, same
-habits, two environments that drift apart the moment you configure either one.
-
-Two things make that harder than it sounds:
-
-- **The work machine is not fully yours.** You may not be able to push it to a personal
-  git remote, and you should not want everything on it leaving in the first place.
-- **What each machine knows differs**, and neither should overwrite the other's view.
-
-DOTORI keeps one source of truth and publishes it outward:
-
-```
-   <workspace>/                one folder your sync service carries between machines
-   |                           (call these two whatever you already call them)
-   +-- <your human vault>/     what you know. Nothing publishes out of here
-   |
-   +-- <your ai vault>/        what your agents know
-           |
-        +--+------------------+---------------------+
-        |                     |                     |
-     at work               at home              machine N
-        |                     |                     |
-   agent A, B, ...       agent A, B, ...       agent A, B, ...
-```
-
-**Neither dimension has a fixed size.** Two is the case it was built for, but nothing in
-the code counts machines — keys come from the computer name, so a third takes
-zero code changes. If two of your machines share a computer name, pass `-MachineKey`; the
-run stops with an error rather than letting them overwrite each other. A runtime that is
-not installed is skipped with a warning, never an error.
-
-### Why a cloud folder and not a git remote
-
-Covered above, and it is the whole reason this exists rather than being one more skills
-syncer. Worth adding: **the git history is still there.** It lives outside the vault, on
-each machine, and pushing it anywhere is a separate decision you make deliberately —
-not a precondition for the tool to work.
-
-## What it does
-
-- **Publishes shared agents and skills** from one source into each installed runtime,
-  converting Markdown agent definitions into whatever format the target expects.
-- **Syncs memory in both directions** between each machine's local agent memory and the
-  shared archive, using a three-way hash comparison against the previous run.
-- **Stops on real conflicts instead of merging.** If both sides genuinely changed, nothing
-  is touched and the conflict is logged. No automatic merge, no silent overwrite.
-- **Does not stop on fake ones.** If both sides "changed" but the text is identical once a
-  byte-order mark and carriage returns are discounted, it converges the bytes and moves on.
-  See [docs/sync.md](docs/sync.md) — this distinction is the difference between a sync that
-  keeps running and one that quietly freezes.
-- **Never propagates deletions.** A memory missing locally is restored from the archive.
-  Retiring a memory should be deliberate, not a side effect of sync.
-- **Gives each machine its own memory index**, so two machines cannot overwrite each
-  other's view of what they know.
-- **Commits vault history** to a git repository kept outside the vault.
-
-## Why the git directory lives outside the vault
-
-If your vault sits in iCloud Drive, Dropbox, or OneDrive and two machines sync the same
-`.git` internals (`index`, packfiles), the repository will eventually corrupt.
-
-DOTORI keeps the git directory local and points only the work tree at the vault:
-
-```
-GIT_DIR   = %USERPROFILE%\.ai-shared-sync\vault-ai.git
-WORK_TREE = <your vault>
-```
-
-Nothing is added inside the vault.
-
-## What you need
-
-| Required | |
+| Asset | Current behavior |
 |---|---|
-| Windows with PowerShell 5.1 | Ships with the OS. Nothing to install |
-| A folder that syncs between your machines | **Any** service — iCloud Drive, Google Drive, Dropbox, OneDrive, Syncthing. Nothing here talks to a cloud API; it just has to be a folder that appears on both machines. See [docs/multi-machine.md](docs/multi-machine.md) for how services differ in the one way that matters |
-| The agent runtimes you want to use | Install them first; see the note under Install |
+| Skills | One shared Markdown source publishes to Claude Code, Codex, and Antigravity's verified workspace skill path. |
+| Agent definitions | Claude Markdown definitions are the source; DOTORI converts them to Codex TOML. Antigravity has no verified agent-definition convention, so DOTORI deliberately does not invent one. |
+| Rules | Opt-in sources can publish to Codex `AGENTS.md` and Antigravity `GEMINI.md`; existing local rules are otherwise left alone. |
+| Claude memory | The selected primary Claude memory store is reconciled between machines with a three-way comparison. |
+| Codex memory | The native Markdown tree is preserved in a machine-scoped archive. DOTORI does **not** claim it becomes portable cross-runtime context. |
 
-| Not required | |
-|---|---|
-| A note-taking app | The vault is plain Markdown folders. Obsidian opens it happily and so does anything else; nothing here depends on one. The `.obsidian/` entries in the git exclude list are inert if you do not use it |
-| iCloud specifically | The **default path** happens to point at one, because defaults have to point somewhere. Override it with `-VaultRoot`. If its **parent** does not exist — usually because the default assumes a cloud client you do not have — the install stops rather than building that whole chain and reporting success. If the parent exists the folder is created, and `Initialize` warns when the location does not look like one a sync service carries |
-| git | Only for keeping vault history. Sync works without it; a missing or failing git is logged and skipped |
-| python | Only for the optional search index, which is not part of this repository |
+DOTORI does **not** sync conversation transcripts, resume an unfinished session, decide which
+memory an agent should inject into context, or automatically merge a real conflict. It
+keeps the environment and written state available; it does not make one agent's live
+conversation magically continue in another.
 
-## Install
+For the exact store boundaries, see [docs/memory.md](docs/memory.md) and
+[docs/multi-machine.md](docs/multi-machine.md).
 
-**Already have DOTORI running?** [docs/upgrading.md](docs/upgrading.md) is the
-upgrade — the steps below are for a first install.
+## See it safely before installing
 
-1. **Look first.** `-Mode Report` writes nothing at all — it resolves every path, says
-   which runtimes it found, and names the settings files it would edit and the exact hook
-   line it would add:
+The [quickstart](docs/quickstart.md) builds disposable runtime folders under your temporary
+directory. It demonstrates, in roughly ten minutes:
 
-```powershell
+1. `-Mode Report` resolving paths without writing anything.
+2. A Markdown Claude agent becoming a Codex TOML agent.
+3. A second machine receiving the shared state.
+4. A deliberate memory conflict stopping without either version being overwritten.
+
+Nothing in that walkthrough touches a real vault, runtime settings file, or runtime
+directory. Every path is redirected explicitly.
+
+## Install on your own machine
+
+Install Claude Code, Codex, or both first. DOTORI will not fabricate their settings files,
+because creating a configuration a runtime has never written is unsafe.
+
+**1. Inspect the exact targets first.** This mode is read-only.
+
+~~~powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File "<repo>\tool\sync-ai-shared.ps1" `
-  -Mode Report -VaultRoot "D:\my-vault"
-```
+  -Mode Report -VaultRoot "D:\my-synced-folder\dotori-vault"
+~~~
 
-   Everything it prints comes from the same variables the real run uses, so it cannot
-   describe one thing and do another. A test lists the whole tree before and after to
-   confirm it leaves nothing behind.
+It reports the resolved vault, installed runtimes, settings files it would edit, and the
+exact session hook command it would add.
 
-2. Copy `tool\sync-ai-shared.ps1` (the shim) and `tool\scripts\sync-ai-shared.ps1` into
-   your vault root and its `scripts\` respectively, then `vault_ai\skills\wrapup\` into
-   your vault's `skills\`. The last one is the routine that ends a session with something
-   written down, and without it the counters below have nothing to count.
-3. Run once to seed the folders and install the session hooks:
+**2. Copy the runtime files into the vault.**
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File "<vault>\sync-ai-shared.ps1" -Mode Initialize
-```
+- `tool\sync-ai-shared.ps1` → `<vault>\sync-ai-shared.ps1`
+- `tool\scripts\sync-ai-shared.ps1` → `<vault>\scripts\sync-ai-shared.ps1`
+- `vault_ai\skills\wrapup\` → `<vault>\skills\wrapup\`
 
-4. After that it runs itself at the start of every session.
+The root shim must remain at that path: installed session hooks call it.
 
-**Install your agent runtimes first.** The hook that makes step 3 true is written into
-each runtime's own settings file, and this will not create a settings file that a runtime
-has not written yet — fabricating one is a good way to overwrite defaults it has not
-chosen. If a runtime is missing, the run says so and skips it; install the runtime, then
-run this again.
+**3. Initialize deliberately.**
 
-**Read this before step 3.** `-Mode Initialize` writes session hooks into your agent
-runtimes' settings files. It is not a dry run. If you want to see what it would touch
-first, read the `Add-HookCommand` calls at the bottom of `tool\scripts\sync-ai-shared.ps1`.
-
-Only `Initialize` writes them. `Sync` — the mode the hook itself runs — reads those files
-and leaves them alone. If a hook is ever removed, run `Initialize` again to put it back.
-
-**The default paths are one person's setup**, including the vault location. Every one of
-them is a parameter — pass `-VaultRoot`, `-ClaudeHome`, `-CodexHome`, `-MirrorRoot` rather
-than rearranging your disk to match:
-
-```powershell
+~~~powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File "<vault>\sync-ai-shared.ps1" `
-  -Mode Initialize -VaultRoot "D:\my-vault"
-```
+  -Mode Initialize -VaultRoot "D:\my-synced-folder\dotori-vault"
+~~~
 
-**Do not delete the shim at the vault root.** Every machine bakes that path into its
-session hook, and a machine whose hook is broken can never run the sync that would
-deliver the fix.
+`Initialize` seeds the vault and adds session hooks only to settings files that already
+exist. It warns when the vault path does not resemble a known sync folder; that detection is
+a hint, not proof. `Sync` is the default hook mode and does not reinstall hooks every run.
 
-## Reading the log
+The full disposable walkthrough, including the expected output and a conflict example, is
+[docs/quickstart.md](docs/quickstart.md). Existing users should read
+[docs/upgrading.md](docs/upgrading.md).
 
-Every run writes `sync\sync-log-<machine>.md`:
+## How synchronization stays recoverable
 
-```
-Agents synced: 5
-Runtimes: agent-a agents=5 skills=14 | agent-b agents=5 skills=14 | agent-c agents=n/a skills=14
-Skills synced: 14 skill(s) / 14 file(s)
-Memory: pushed 3 / pulled 0 / normalized 0 / conflicts 0
-Mirror: committed 4 path(s)
-Vault location: C:\Users\you\OneDrive\dotori (OneDrive)
-Lifecycle: active=80 verified=6 / no-status=0
-Promoted: 3 memory(ies) with a human-vault destination
-Legacy promoted status: 0 memory(ies) to migrate
-Cloud conflict copies: 0
-```
+- A local Git mirror can record vault history, but its `.git` directory stays outside the
+  cloud-synced vault. A Git remote is optional and never added unless you pass one.
+- Each machine owns its own manifest, log, and memory index. A collision in the machine
+  identity stops the run instead of silently sharing a baseline.
+- Memory uses a baseline/local/shared three-way comparison. If both sides changed but are
+  textually identical after BOM and line-ending normalization, it converges them; otherwise
+  it leaves both copies untouched and logs the conflict.
+- Deletions do not propagate automatically. A missing local memory is restored from the
+  archive so that a sync cannot quietly erase it.
+- The log calls out conflict copies created by known cloud clients, but never deletes them.
 
-`Cloud conflict copies` is your sync service telling on itself: it renamed a losing write
-instead of merging it, and one of the two files holds work that never crossed over. They
-are listed, never deleted for you.
+Read [docs/sync.md](docs/sync.md) for the comparison rules and
+[docs/spec.md](docs/spec.md) for the on-disk contract.
 
-`Runtimes` is per-runtime on purpose. One aggregate number hides a runtime that silently
-received nothing.
+## Important limits and safety
 
-`Conflicts` above zero means two machines made genuinely different edits to the same file.
-Open the listed paths, decide which side is right, resolve it explicitly. The tool will
-not choose for you. `normalized` counts the ones it resolved itself because there was
-nothing to decide.
+- A folder that is not actually synced still works on one machine and reaches no second
+  machine. DOTORI cannot verify replication from Windows.
+- The script reads runtime-internal memory locations whose layouts can change without
+  notice. Check `Memory source:` in the generated log.
+- The installation writes session hooks into existing runtime settings files. Use
+  `-Mode Report` first and read the target paths.
+- Keep credentials, runtime settings, plugin caches, session logs, and employer-specific
+  information out of the shared vault unless your policy explicitly permits them there.
+- A missing runtime is skipped with a warning; a real memory conflict requires a human
+  decision.
 
-`no-status` counts memories missing their lifecycle field. `Promoted` counts the ones a
-person has accepted into the human vault — a separate axis from the lifecycle, so a
-promoted memory still has a status. See [docs/memory.md](docs/memory.md).
+For a clean-Windows rehearsal, including the behavior without Git or an installed runtime,
+see [docs/fresh-machine-check.md](docs/fresh-machine-check.md).
+
+## Feedback that helps
+
+DOTORI is a personal setup made public for people with this particular constraint. The most
+useful reports are:
+
+- A [safe try/install report](https://github.com/J-Roc-H/dotori-vault/issues/new?template=try-dotori.yml):
+  what you tried, where the first confusing step was, and whether the scratch demo or an
+  actual setup completed.
+- A [fresh-Windows report](https://github.com/J-Roc-H/dotori-vault/issues/new?template=fresh-install-report.yml):
+  especially a result from a machine that started without a working setup.
+- A [sync-service conflict-copy shape](https://github.com/J-Roc-H/dotori-vault/issues/new?template=sync-service-report.yml)
+  that the log did not recognize.
+
+Do not paste vault contents, credentials, employer data, runtime settings, or an unredacted
+sync log. A redacted summary and the relevant warning or error lines are enough to begin.
 
 ## Documentation
 
-| Document | What it covers |
+| Document | Start here when you need… |
 |---|---|
-| [vault_ai/skills/wrapup/](vault_ai/skills/wrapup/SKILL.md) | The finishing routine: what to write down before you stop |
-| [docs/upgrading.md](docs/upgrading.md) | Already running it? The whole upgrade, and what the new counts will tell you |
-| [docs/quickstart.md](docs/quickstart.md) | Ten minutes on a scratch path: see it work without touching your setup |
-| [docs/spec.md](docs/spec.md) | The on-disk contract, for writing another implementation |
-| [docs/multi-machine.md](docs/multi-machine.md) | How machines and runtimes scale, and why neither is a fixed list |
-| [docs/routing.md](docs/routing.md) | Giving an agent the context for the task instead of everything |
-| [docs/sync.md](docs/sync.md) | The three-way comparison, and real versus encoding-only conflicts |
-| [docs/memory.md](docs/memory.md) | Memory folders, and the constraint that only one is auto-loaded |
-| [docs/handoff.md](docs/handoff.md) | Machine-to-machine work orders, and why they are not memories |
-| [docs/candidates.md](docs/candidates.md) | Promoting agent findings into human knowledge |
-| [docs/projects.md](docs/projects.md) | Project working context |
-| [docs/index.md](docs/index.md) | Reserved for a search index |
-| [docs/evolution.md](docs/evolution.md) | How this architecture arrived at its current shape |
-| [vault_human/](vault_human/README.md) | The human side: folder skeleton and templates |
-| [docs/examples/sample-workspace/](docs/examples/sample-workspace/README.md) | A miniature of both vaults, with invented content |
-| [tool/brain-git.ps1](tool/brain-git.ps1) | Reading and rolling back the vault's git history by hand |
-| [CONTRIBUTING.md](.github/CONTRIBUTING.md) | What this project takes, what it does not, and how fast to expect a reply |
-| [CHANGELOG.md](CHANGELOG.md) | What changed and why |
-
-If you only read one, read [docs/evolution.md](docs/evolution.md). The code is specific to
-one platform; the failures behind it are not.
-
-## If one of your machines belongs to an employer
-
-Read this before pointing it at a work machine.
-
-**Check what you are allowed to move.** This tool copies files out of that machine into a
-cloud-synced folder, and optionally into a git remote. Both are exfiltration paths as far
-as an employer is concerned, however innocuous the content feels. Whether that is
-acceptable is a policy question, not a technical one, and it is yours to answer first.
-
-**Nothing here inspects what you move.** There is no filter between your machine and the
-vault: whatever you put in the vault is what the cloud folder receives and what a private
-remote stores. Earlier revisions of this document referred to a publish gate that screened
-an extraction step; there is no extraction step any more (see *Where the code lives*), and
-no such gate ships here. Do not read this tool as having a safety net it does not have.
-
-**Practical separation that has held up:**
-
-| Do | Instead of |
-|---|---|
-| Keep employer-specific values in configuration files that never sync | Hardcoding paths, naming rules, or team policy into shared skills and agents |
-| Write the shared skill generically, keep the specifics local | One skill that only makes sense inside one organization |
-| Add a check that fails loudly if an employer identifier ever reaches a shared file | Trusting yourself to notice |
-
-The last one is the general rule this project keeps relearning: a check that runs every
-time beats an intention to be careful. If you publish anything derived from your vault,
-write the check before you need it.
-
-## Uninstalling
-
-Nothing here is hard to reverse, but the steps are worth writing down rather than leaving
-you to work them out from the source.
-
-1. **Remove the hooks.** In each runtime's settings file — `%USERPROFILE%\.claude\settings.json`,
-   and `%USERPROFILE%\.codex\hooks.json` if you use Codex — delete the `SessionStart` and
-   `Stop` entries whose command mentions `sync-ai-shared.ps1`. The installer backed each
-   file up before its first edit, under `%USERPROFILE%\.ai-shared-sync\backups\<timestamp>\`,
-   so you can also restore one of those.
-
-2. **Delete the local working area** if you want the git history gone:
-   `%USERPROFILE%\.ai-shared-sync\`. This holds the mirror repository, the settings
-   backups, and this machine's identity file. Deleting it loses the vault's version
-   history on this machine and nothing else.
-
-3. **Keep or delete the vault**, as you prefer. It is your content in plain Markdown, and
-   nothing outside it is needed to read it. The published copies inside each runtime's own
-   folders — `agents\`, `skills\` — stay where they are and keep working; they simply stop
-   being updated.
-
-That is all of it. There is no service to cancel, no registry key, and nothing running in
-the background between sessions.
-
-## Where the code lives
-
-**This repository is the code.** It is not an extract of a private one that gets scrubbed
-and copied out periodically — it was, briefly, and that arrangement had a defect worth
-naming: the author ran a private copy daily while publishing a different one, so the
-published code was the version nobody actually used. Every fault found in the first review
-after publication was of exactly that kind — real on a fresh machine, invisible on the one
-it grew up on.
-
-So the script here is the script the author runs. A vault holds content — skills, agents,
-memory — and that stays private; the code does not live there. If you find a bug, you are
-finding it in the same file its author runs.
-
-Which is why the repository is split the way it is:
-
-| | |
-|---|---|
-| `tool/` | Everything that executes. The shim, the implementation, the tests |
-| `vault_ai/` | Starting content for the agent vault. Right now that is the wrapup skill; `Initialize` creates the rest of the folders, because git does not track empty ones |
-| `vault_human/` | Starting skeleton and templates for the human vault |
-| `docs/` | The contract and the reasoning, including the sample workspace |
-
-`vault_ai/` and `vault_human/` are named generically because a repository has to explain
-both sides to a stranger. **They are not names your own folders have to take** — see
-[docs/spec.md](docs/spec.md#where-the-vault-sits).
-
-**Three different roots, and confusing them costs you.** The repository root is what you
-are reading. The tool root is `tool/`. The vault root is on your own disk and is where the
-shim goes — every machine bakes *that* path into its session hook.
-
-## Memory stores and optional shared rules
-
-Claude's primary memory folder is selected by its newest Markdown file. Pin it with
-`-MemoryProject <project-directory>`; the choice is remembered under the local working area.
-Other Claude project folders are archived separately. Codex's native Markdown memory is
-mirrored recursively under `memory/codex-handoff/<machine>/`; received Claude copies and
-`.git` are excluded. Native Codex stores from different machines are never mixed or injected
-into each other. See [memory.md](docs/memory.md) for the exact scope and limitations.
-
-If you supply `source/codex-AGENTS.md`, sync publishes it to Codex's `AGENTS.md`, backing up
-existing rules before a change. Without that explicit source, existing rules are left alone.
-No personal rules, agents, memories or project registry are shipped in this repository.
-
-## Known limitations
-
-Stated up front, because finding these yourself is worse than being told.
-
-**A folder that is not synced anywhere still installs cleanly.** Nothing here can ask
-Windows whether a folder replicates — sync clients are ordinary programs watching ordinary
-directories. So the vault location is checked against the shapes of the services it knows
-— Google Drive, OneDrive, iCloud Drive, Dropbox, Syncthing, Nextcloud, ownCloud, pCloud,
-MEGA, Resilio Sync, Sync.com and Yandex Disk — and `Initialize` **names them** when none
-match, rather than saying "a sync service" and leaving you to work out which of your folders
-it means. It is a guess and it says it is a guess. If it
-is right and you ignore it, everything on that machine still works and **nothing reaches a
-second computer**, because there is no second copy of the folder anywhere. `Vault location:`
-in the log is the standing answer.
-
-**The session itself does not travel.** This is the one people expect and do not get.
-
-| Crosses over | Does not |
-|---|---|
-| Rules, skills, agent definitions | The conversation |
-| Memory that was **written** during the session | Whatever you were part-way through |
-| | What you were about to do next |
-
-Claude sync selects one primary `projects\<project>\memory` folder and archives the other
-local projects separately. Codex sync preserves its native Markdown tree under a machine
-namespace. Neither is a session transcript; conversations are not copied. So closing the laptop mid-task on Friday
-and opening the other machine on Saturday gives you the same environment and none of the
-thread: the agent knows how you work, not what you were doing.
-
-**Nothing writes a handoff for you.** If you want the work to continue elsewhere, leave a
-note before you stop — `handoff/` for an instruction to the other machine, `projects/` for
-state that spans sessions. Both are folders a person fills in. The sync will tell the other
-machine a new handoff exists; it will not invent one.
-
-The shipped [`vault_ai/skills/wrapup/`](vault_ai/skills/wrapup/SKILL.md) is that step: ask for it when you
-finish, and it writes the memory, the project state, and the handoff if one is needed. It
-still has to be asked. A hook cannot do it — the session-end hook fires after every turn,
-which is the wrong granularity, and nothing here can summarise a conversation anyway.
-
-**And give the upload a moment.** The sync writes into the vault when a session ends, but
-your cloud client still has to send it. Shut the machine down seconds later and the last
-thing written may never leave — and nothing warns you, because the log stays on the machine
-you walked away from.
-
-**It reads an agent runtime's internal memory folder.** Memory sync locates the local
-store by walking the runtime's own project directory layout. That layout is undocumented
-and can change without notice — when it does, memory sync silently finds nothing while
-everything else keeps working. If `Memory source:` in the log is empty or wrong, this is
-why. Agent and skill publication do not depend on it.
-
-**Publication targets are per-runtime and not all runtimes accept everything.** The log
-prints coverage per runtime; a runtime showing `agents=n/a` has no verified convention for
-agent definitions, so nothing is written there. See
-[docs/multi-machine.md](docs/multi-machine.md).
-
-**The installer edits your runtime settings files.** See the note under Install.
-
-**Conflicts need a human.** By design. If two machines genuinely diverge on the same
-memory, sync stops on that file until you resolve it, and it will stay stopped. Check
-`Conflicts` in the log rather than assuming silence means success.
-
-## Scope
-
-Windows and PowerShell 5.1, with no dependency beyond what ships with the OS. Used daily
-across several machines and several agent runtimes.
-
-The install above has been rehearsed end to end into an empty directory tree — every path
-redirected, nothing of the real setup touched — and that rehearsal found three faults that
-years of daily use never could, because each one only appears on a machine that does *not*
-already have a working setup. See the changelog.
-
-The three environmental unknowns that rehearsal used to leave open — execution policy,
-whether git is present, PowerShell version — are now created deliberately by
-[`tool/tests/FreshMachine.Tests.ps1`](tool/tests/FreshMachine.Tests.ps1): it strips git from
-`PATH` and checks the run still finishes and still publishes, sets the execution policy to
-`Restricted` and checks the documented command works while the same command without
-`-ExecutionPolicy Bypass` is refused, and asserts the suite is running on Windows PowerShell
-5.1 rather than assuming it.
-
-**Two things those tests cannot reach.** The runners have no agent runtime installed, so the
-path that writes a hook into a real `settings.json` is exercised against a fixture rather
-than the real thing. And no test can tell whether an instruction is merely confusing.
-[docs/fresh-machine-check.md](docs/fresh-machine-check.md) is how to close both in about
-twenty minutes on a genuinely clean Windows.
-
-**Mixed setups.** A work machine and a home machine are not always the same OS. The script
-is Windows-only; the vault is not. [docs/spec.md](docs/spec.md) defines the layout, hashing
-and reconciliation rules precisely enough for another implementation to share a vault with
-this one. Nothing else here needs to change for that to work — if you write one, open an
-issue.
-
-A note if you extend it: PowerShell 5.1 decodes a BOM-less `.ps1` as ANSI, so any
-non-ASCII literal in the script becomes mojibake at runtime. The scripts here are kept
-ASCII-only for that reason.
-
-## Feedback
-
-This is a personal setup, shared as it is rather than as a product. Issues are read, but
-replies are best-effort and may be slow.
-
-Two kinds of report are especially useful, because they cover ground this cannot reach on
-its own:
-
-- **What your sync service does.** The conflict-copy shapes in
-  [docs/multi-machine.md](docs/multi-machine.md) were collected from documentation and from
-  one service in daily use. If yours leaves something the log does not recognize, the shape
-  is easy to add.
-- **What a fresh machine does.** The install has been rehearsed into an empty directory
-  tree, but never run on a Windows machine that started with nothing.
+| [docs/quickstart.md](docs/quickstart.md) | A disposable, copy-pasteable demonstration |
+| [docs/upgrading.md](docs/upgrading.md) | To update an existing installation |
+| [docs/spec.md](docs/spec.md) | The portable on-disk contract |
+| [docs/multi-machine.md](docs/multi-machine.md) | Machine identity, runtime coverage, and sync-folder behavior |
+| [docs/sync.md](docs/sync.md) | Three-way reconciliation and conflict handling |
+| [docs/memory.md](docs/memory.md) | Native-store boundaries and the evidence lifecycle |
+| [docs/evolution.md](docs/evolution.md) | The failures that shaped the design |
+| [.github/CONTRIBUTING.md](.github/CONTRIBUTING.md) | What contributions are in scope |
 
 ## License
 
-MIT
+[MIT](LICENSE)

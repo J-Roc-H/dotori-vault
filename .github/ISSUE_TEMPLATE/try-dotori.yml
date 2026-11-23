@@ -1,0 +1,61 @@
+name: Try DOTORI
+description: Report a quickstart or installation attempt, including a result that worked.
+title: "Try DOTORI: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This report is for the first experience, not only failures. A completed scratch
+        quickstart, a confusing sentence, or a setup that turned out not to fit is useful.
+
+        **Privacy:** do not paste vault contents, credentials, company/project names,
+        runtime settings, session transcripts, or a full unredacted sync log. Redact
+        paths and identifiers; the summary and the relevant warning/error lines are enough.
+  - type: dropdown
+    id: outcome
+    attributes:
+      label: What did you try?
+      options:
+        - Scratch quickstart completed
+        - Scratch quickstart got stuck
+        - Real installation completed
+        - Real installation got stuck
+        - I only reviewed the README or demo
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Windows version, PowerShell version, and runtime(s), if known.
+      placeholder: "Windows 11 24H2, PowerShell 5.1, Codex + Claude Code"
+  - type: dropdown
+    id: sync_folder
+    attributes:
+      label: Did you use a synced folder?
+      options:
+        - No, scratch quickstart only
+        - Yes, organization-approved folder
+        - Yes, personal folder
+        - No, and that is why DOTORI was not a fit
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: What happened?
+      description: Say what you expected and the last step you reached. A successful result can be brief.
+    validations:
+      required: true
+  - type: textarea
+    id: friction
+    attributes:
+      label: First unclear, surprising, or unsafe-looking part
+      description: An exact README heading, command, or wording is especially useful.
+  - type: textarea
+    id: output
+    attributes:
+      label: Redacted relevant output (optional)
+      description: Only the relevant warning, error, or final summary. Remove paths and private identifiers.
+      render: text
